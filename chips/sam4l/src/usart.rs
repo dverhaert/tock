@@ -36,7 +36,7 @@ struct UsartRegisters {
     linir: ReadWrite<u32, LinID::Register>,    // 0x58
     linbr: ReadOnly<u32, LinBaud::Register>,   // 0x5C
     _reserved2: [ReadOnly<u32>; 33],
-    wpmr: ReadWrite<u32, ProtectMode::Register>, // 0xE4
+    wpmr: ReadWrite<u32, ProtectMode::Register>,  // 0xE4
     wpsr: ReadOnly<u32, ProtectStatus::Register>, // 0xE8
     _reserved3: [ReadOnly<u32>; 4],
     version: ReadOnly<u32, Version::Register>, // 0xFC
