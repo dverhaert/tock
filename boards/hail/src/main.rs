@@ -6,7 +6,6 @@
 #![no_std]
 #![no_main]
 #![feature(panic_implementation)]
-#![deny(missing_docs)]
 
 extern crate capsules;
 #[allow(unused_imports)]
@@ -113,6 +112,16 @@ impl Platform for Hail {
 
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
+        }
+    }
+
+    fn print_memory_layout(&self) {
+        use io;
+        use kernel::debug;
+
+        let mut writer: io::Writer = io::Writer { initialized: false };
+        unsafe {
+            debug::panic_process_info(&mut writer);
         }
     }
 }

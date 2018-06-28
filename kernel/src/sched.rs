@@ -80,6 +80,7 @@ unsafe fn do_process<P: Platform, C: Chip>(
                 process.setup_mpu(chip.mpu());
                 chip.mpu().enable_mpu();
                 systick.enable(true);
+                platform.print_memory_layout(); 
                 process.switch_to();
                 systick.enable(false);
                 chip.mpu().disable_mpu();

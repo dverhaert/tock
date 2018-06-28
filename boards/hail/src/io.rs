@@ -7,8 +7,8 @@ use kernel::hil::led;
 use kernel::hil::uart::{self, UART};
 use sam4l;
 
-struct Writer {
-    initialized: bool,
+pub struct Writer {
+    pub initialized: bool,
 }
 
 static mut WRITER: Writer = Writer { initialized: false };
