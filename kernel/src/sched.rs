@@ -21,8 +21,6 @@ const KERNEL_TICK_DURATION_US: u32 = 10000;
 /// Skip re-scheduling a process if its quanta is nearly exhausted
 const MIN_QUANTA_THRESHOLD_US: u32 = 500;
 
-static mut COUNT: u8 = 0;
-
 /// Main loop.
 pub fn kernel_loop<P: Platform, C: Chip>(
     platform: &P,
@@ -47,6 +45,8 @@ pub fn kernel_loop<P: Platform, C: Chip>(
                     break;
                 }
             }
+
+            loop {}
 
             chip.atomic(|| {
                 if !chip.has_pending_interrupts() && process::processes_blocked() {
@@ -86,10 +86,6 @@ unsafe fn do_process<P: Platform, C: Chip>(
                 process.switch_to();
                 systick.enable(false);
                 chip.mpu().disable_mpu();
-                COUNT += 1;
-                if COUNT == 2 {
-                    loop {}
-                }
             }
             process::State::Yielded => match process.dequeue_task() {
                 None => break,
