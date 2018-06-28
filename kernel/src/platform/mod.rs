@@ -13,6 +13,8 @@ pub trait Platform {
     where
         F: FnOnce(Option<&Driver>) -> R;
     
+    fn print_string(&self, string: &str);
+    
     fn print_memory_layout(&self);
 }
 

@@ -114,14 +114,23 @@ impl Platform for Hail {
             _ => f(None),
         }
     }
+   
+        
+    fn print_string(&self, string: &str) {
+        use io;
+        use core::fmt::Write;
+        
+        unsafe {
+            let _ = io::WRITER.write_str(string);
+        }
+    }
 
     fn print_memory_layout(&self) {
         use io;
         use kernel::debug;
-
-        let mut writer: io::Writer = io::Writer { initialized: false };
+        
         unsafe {
-            debug::panic_process_info(&mut writer);
+            debug::panic_process_info(&mut io::WRITER);
         }
     }
 }

@@ -11,7 +11,7 @@ pub struct Writer {
     pub initialized: bool,
 }
 
-static mut WRITER: Writer = Writer { initialized: false };
+pub static mut WRITER: Writer = Writer { initialized: false };
 
 impl Write for Writer {
     fn write_str(&mut self, s: &str) -> ::core::fmt::Result {
