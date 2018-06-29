@@ -46,6 +46,8 @@ pub fn kernel_loop<P: Platform, C: Chip>(
                 }
             }
 
+            panic!("");
+
             chip.atomic(|| {
                 if !chip.has_pending_interrupts() && process::processes_blocked() {
                     chip.sleep();
