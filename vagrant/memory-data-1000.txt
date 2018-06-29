@@ -1,0 +1,192 @@
+Kernel panic at /home/danilo/Documents/tock/kernel/src/sched.rs:54:
+	""
+	Kernel version release-1.2-2018-06-160-ged33950
+
+---| Fault Status |---
+No faults detected.
+
+---| App Status |---
+App: crc   -   [Running]
+ Events Queued: 0   Syscall Count: 1008   Dropped Callback Count: 0
+ Restart Count: 0
+ Last Syscall: COMMAND
+
+ ╔═══════════╤══════════════════════════════════════════╗
+ ║  Address  │ Region Name    Used | Allocated (bytes)  ║
+ ╚0x20006000═╪══════════════════════════════════════════╝
+             │ ▼ Grant         656 |    656          
+  0x20005D70 ┼───────────────────────────────────────────
+             │ Unused
+  0x20005340 ┼───────────────────────────────────────────
+             │ ▲ Heap         1552 |   4160               S
+  0x20004D30 ┼─────────────────────────────────────────── R
+             │ Data           1328 |   1328               A
+  0x20004800 ┼─────────────────────────────────────────── M
+             │ ▼ Stack         352 |   2048          
+  0x200046A0 ┼───────────────────────────────────────────
+             │ Unused
+  0x20004000 ┴───────────────────────────────────────────
+             .....
+  0x00034000 ┬─────────────────────────────────────────── F
+             │ App Flash     16344                        L
+  0x00030028 ┼─────────────────────────────────────────── A
+             │ Protected        40                        S
+  0x00030000 ┴─────────────────────────────────────────── H
+
+  R0 : 0x00000000    R6 : 0x200047DC
+  R1 : 0x00000002    R7 : 0x00000003
+  R2 : 0x00000003    R8 : 0x200047DC
+  R3 : 0x00000000    R10: 0x20004A0C
+  R4 : 0x200047AC    R11: 0x00000000
+  R5 : 0x00000000    R12: 0x00030331
+  R9 : 0x20004800 (Static Base Register)
+  SP : 0x20004780 (Process Stack Pointer)
+  LR : 0x00030299
+  PC : 0x0003055A
+ YPC : 0x00030536
+
+ APSR: N 0 Z 0 C 1 V 0 Q 0
+       GE 0 0 0 0
+ EPSR: ICI.IT 0x00
+       ThumbBit true 
+ To debug, run `make debug RAM_START=0x20004000 FLASH_INIT=0x30051`
+ in the app's folder and open the .lst file.
+
+App: acifc   -   [Running]
+ Events Queued: 0   Syscall Count: 22   Dropped Callback Count: 0
+ Restart Count: 0
+ Last Syscall: YIELD
+
+ ╔═══════════╤══════════════════════════════════════════╗
+ ║  Address  │ Region Name    Used | Allocated (bytes)  ║
+ ╚0x20008000═╪══════════════════════════════════════════╝
+             │ ▼ Grant         564 |    564          
+  0x20007DCC ┼───────────────────────────────────────────
+             │ Unused
+  0x2000704C ┼───────────────────────────────────────────
+             │ ▲ Heap         1548 |   5004               S
+  0x20006A40 ┼─────────────────────────────────────────── R
+             │ Data            576 |    576               A
+  0x20006800 ┼─────────────────────────────────────────── M
+             │ ▼ Stack         320 |   2048          
+  0x200066C0 ┼───────────────────────────────────────────
+             │ Unused
+  0x20006000 ┴───────────────────────────────────────────
+             .....
+  0x00036000 ┬─────────────────────────────────────────── F
+             │ App Flash      8148                        L
+  0x0003402C ┼─────────────────────────────────────────── A
+             │ Protected        44                        S
+  0x00034000 ┴─────────────────────────────────────────── H
+
+  R0 : 0x00000001    R6 : 0x00000000
+  R1 : 0xFFFFFFFF    R7 : 0x00000000
+  R2 : 0x20006800    R8 : 0x00000000
+  R3 : 0x20006800    R10: 0x00000000
+  R4 : 0x00000001    R11: 0x00000000
+  R5 : 0x20006800    R12: 0x000341E2
+  R9 : 0x20006800 (Static Base Register)
+  SP : 0x200067B8 (Process Stack Pointer)
+  LR : 0x00034241
+  PC : 0x00034D54
+ YPC : 0x000341B6
+
+ APSR: N 0 Z 0 C 1 V 0 Q 0
+       GE 0 0 0 0
+ EPSR: ICI.IT 0x00
+       ThumbBit true 
+ To debug, run `make debug RAM_START=0x20006000 FLASH_INIT=0x34055`
+ in the app's folder and open the .lst file.
+
+App: rng   -   [Yielded]
+ Events Queued: 0   Syscall Count: 196   Dropped Callback Count: 0
+ Restart Count: 0
+ Last Syscall: YIELD
+
+ ╔═══════════╤══════════════════════════════════════════╗
+ ║  Address  │ Region Name    Used | Allocated (bytes)  ║
+ ╚0x2000A000═╪══════════════════════════════════════════╝
+             │ ▼ Grant         624 |    624          
+  0x20009D90 ┼───────────────────────────────────────────
+             │ Unused
+  0x20009380 ┼───────────────────────────────────────────
+             │ ▲ Heap         2052 |   4628               S
+  0x20008B7C ┼─────────────────────────────────────────── R
+             │ Data            892 |    892               A
+  0x20008800 ┼─────────────────────────────────────────── M
+             │ ▼ Stack        1088 |   2048          
+  0x200083C0 ┼───────────────────────────────────────────
+             │ Unused
+  0x20008000 ┴───────────────────────────────────────────
+             .....
+  0x00038000 ┬─────────────────────────────────────────── F
+             │ App Flash      8152                        L
+  0x00036028 ┼─────────────────────────────────────────── A
+             │ Protected        40                        S
+  0x00036000 ┴─────────────────────────────────────────── H
+
+  R0 : 0x00012AAE    R6 : 0x2000891C
+  R1 : 0x2000855B    R7 : 0x20008A78
+  R2 : 0x20008590    R8 : 0x00000000
+  R3 : 0x00000100    R10: 0x00000000
+  R4 : 0x00000007    R11: 0x00000000
+  R5 : 0x20008590    R12: 0x20008A78
+  R9 : 0x20008800 (Static Base Register)
+  SP : 0x20008530 (Process Stack Pointer)
+  LR : 0x0003643F
+  PC : 0x2000855B
+ YPC : 0x00036422
+
+ APSR: N 0 Z 0 C 0 V 0 Q 0
+       GE 0 0 1 1
+ EPSR: ICI.IT 0x18
+       ThumbBit false !!ERROR - Cortex M Thumb only!
+ To debug, run `make debug RAM_START=0x20008000 FLASH_INIT=0x36051`
+ in the app's folder and open the .lst file.
+
+App: hello_loop   -   [Yielded]
+ Events Queued: 1   Syscall Count: 51   Dropped Callback Count: 0
+ Restart Count: 0
+ Last Syscall: YIELD
+
+ ╔═══════════╤══════════════════════════════════════════╗
+ ║  Address  │ Region Name    Used | Allocated (bytes)  ║
+ ╚0x2000C000═╪══════════════════════════════════════════╝
+             │ ▼ Grant         588 |    588          
+  0x2000BDB4 ┼───────────────────────────────────────────
+             │ Unused
+  0x2000B024 ┼───────────────────────────────────────────
+             │ ▲ Heap         1508 |   4980               S
+  0x2000AA40 ┼─────────────────────────────────────────── R
+             │ Data            576 |    576               A
+  0x2000A800 ┼─────────────────────────────────────────── M
+             │ ▼ Stack         320 |   2048          
+  0x2000A6C0 ┼───────────────────────────────────────────
+             │ Unused
+  0x2000A000 ┴───────────────────────────────────────────
+             .....
+  0x0003A000 ┬─────────────────────────────────────────── F
+             │ App Flash      8144                        L
+  0x00038030 ┼─────────────────────────────────────────── A
+             │ Protected        48                        S
+  0x00038000 ┴─────────────────────────────────────────── H
+
+  R0 : 0x0001123B    R6 : 0x2000A8E0
+  R1 : 0x2000A7C3    R7 : 0x00000000
+  R2 : 0x2000A800    R8 : 0x00000000
+  R3 : 0x00000000    R10: 0x00000000
+  R4 : 0x00000003    R11: 0x00000000
+  R5 : 0x2000A800    R12: 0x00000000
+  R9 : 0x2000A800 (Static Base Register)
+  SP : 0x2000A798 (Process Stack Pointer)
+  LR : 0x0003834B
+  PC : 0x2000A7C3
+ YPC : 0x0003832E
+
+ APSR: N 0 Z 0 C 0 V 0 Q 0
+       GE 0 0 1 1
+ EPSR: ICI.IT 0x20
+       ThumbBit false !!ERROR - Cortex M Thumb only!
+ To debug, run `make debug RAM_START=0x2000a000 FLASH_INIT=0x38059`
+ in the app's folder and open the .lst file.
+
