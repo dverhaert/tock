@@ -213,14 +213,14 @@ impl kernel::mpu::MPU for MPU {
 
             // Once we have a subregion size, we get a region size by
             // multiplying it by the number of subregions per region.
-            // 128 = 16*8;
+            // 256 = 32*8;
             let region_size = subregion_size * 8;
             // Finally, we calculate the region base by finding the nearest
             // address below `start` that aligns with the region size.
-            // Round down and align to region_size, e.g. 256 = 288 - (288  % 128)
+            // Round down and align to region_size, e.g. 512 = 576 - (576  % 256)
             let region_start = start - (start % region_size);
 
-            // if 128 + 256 - 288 < 800
+            // if 256 + 512 - 576 < len? 800
             // Check if we have enough memory to do this 
             if region_size + region_start - start < len {
                 // Sanity check that the amount left over space in the region
@@ -247,7 +247,7 @@ impl kernel::mpu::MPU for MPU {
             let max_subregion = min_subregion + len / subregion_size - 1;
             // Length has to be aligned to region size
             let region_len = PowerOfTwo::floor(region_size as u32);
-
+            debug!("case 2");
             // Print start and size for MPU regions
             process.data[region_num].base = region_start;
             process.data[region_num].size = 2_u32.pow(region_len.exp::<u32>()) as usize;
