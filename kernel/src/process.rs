@@ -496,6 +496,12 @@ impl<'a> Process<'a> {
         let flash_start = self.flash.as_ptr() as usize;
         let flash_len = self.flash.len();
 
+        // Initialize memory region data to zero
+        for i in 0..8 {
+            self.data[i].base = 0;
+            self.data[i].size = 0;
+        }
+
         match MPU::create_region(
             self,
             0,
@@ -1347,7 +1353,7 @@ impl<'a> Process<'a> {
             let _ = writer.write_fmt(format_args!("\r\n Region: {}", i));
 
             let base = self.data[i].base;
-            let size = self.data[i].base;
+            let size = self.data[i].size;
 
             let _ = writer.write_fmt(format_args!("\r\n Base: {}", base));
             let _ = writer.write_fmt(format_args!("\r\n Size: {}", size));
