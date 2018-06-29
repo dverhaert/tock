@@ -327,6 +327,7 @@ pub struct Process<'a> {
 }
 
 pub struct RegionInfo {
+    pub case: u8,
     pub base: usize,
     pub size: usize,
 }
@@ -498,6 +499,7 @@ impl<'a> Process<'a> {
 
         // Initialize memory region data to zero
         for i in 0..8 {
+            self.data[i].case = 0;
             self.data[i].base = 0;
             self.data[i].size = 0;
         }
@@ -1350,13 +1352,17 @@ impl<'a> Process<'a> {
        
         // Print out memory region data
         for i in 0..8 {
-            let _ = writer.write_fmt(format_args!("\r\n Region: {}", i));
-
+            let case = self.data[i].case;
             let base = self.data[i].base;
             let size = self.data[i].size;
 
-            let _ = writer.write_fmt(format_args!("\r\n Base: {}", base));
+            let _ = writer.write_fmt(format_args!("\r\n Region {}", i));
+            let _ = writer.write_fmt(format_args!("\r\n Case: {}", case));
+            let _ = writer.write_fmt(format_args!("\r\n Base: {:#010X}", base));
             let _ = writer.write_fmt(format_args!("\r\n Size: {}", size));
+            let _ = writer.write_fmt(format_args!("\r\n"));
         }
+            
+        let _ = writer.write_fmt(format_args!("\r\n"));
     }
 }
