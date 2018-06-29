@@ -330,6 +330,8 @@ pub struct RegionInfo {
     pub case: u8,
     pub base: usize,
     pub size: usize,
+    pub len: usize,
+    pub align: usize,
 }
 
 // Stores the current number of callbacks enqueued + processes in Running state
@@ -502,6 +504,8 @@ impl<'a> Process<'a> {
             self.data[i].case = 0;
             self.data[i].base = 0;
             self.data[i].size = 0;
+            self.data[i].len = 0;
+            self.data[i].align = 0;
         }
 
         match MPU::create_region(
@@ -1355,11 +1359,15 @@ impl<'a> Process<'a> {
             let case = self.data[i].case;
             let base = self.data[i].base;
             let size = self.data[i].size;
+            let len = self.data[i].len;
+            let align = self.data[i].align;
 
             let _ = writer.write_fmt(format_args!("\r\n Region {}", i));
             let _ = writer.write_fmt(format_args!("\r\n Case: {}", case));
             let _ = writer.write_fmt(format_args!("\r\n Base: {:#010X}", base));
             let _ = writer.write_fmt(format_args!("\r\n Size: {}", size));
+            let _ = writer.write_fmt(format_args!("\r\n Len: {}", len));
+            let _ = writer.write_fmt(format_args!("\r\n size % len: {}", align));
             let _ = writer.write_fmt(format_args!("\r\n"));
         }
             
