@@ -173,6 +173,8 @@ impl kernel::mpu::MPU for MPU {
             process.data[region_num].case = 1;
             process.data[region_num].base = start;
             process.data[region_num].size = 2_u32.pow(region_len.exp::<u32>()) as usize;
+            process.data[region_num].len = len;
+            process.data[region_num].align = start % len;
 
             if region_len.exp::<u32>() < 5 {
                 // Region sizes must be 32 Bytes or larger
@@ -253,6 +255,8 @@ impl kernel::mpu::MPU for MPU {
             process.data[region_num].case = 2;
             process.data[region_num].base = region_start;
             process.data[region_num].size = 2_u32.pow(region_len.exp::<u32>()) as usize;
+            process.data[region_num].len = len;
+            process.data[region_num].align = start % len;
 
             if region_len.exp::<u32>() < 7 {
                 // Subregions only supported for regions sizes 128 bytes and up.

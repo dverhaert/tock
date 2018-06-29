@@ -50,7 +50,7 @@ pub fn kernel_loop<P: Platform, C: Chip>(
 
             COUNT += 1;
             
-            if COUNT >= 10 {
+            if COUNT >= 1000 {
                 panic!("");
             }
 
