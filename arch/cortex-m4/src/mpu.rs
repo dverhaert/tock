@@ -155,6 +155,10 @@ impl kernel::mpu::MPU for MPU {
             return None;
         }
 
+        // Example
+        process.data[region_num].base = 500;
+        process.data[region_num].size = 100;
+
         // There are two possibilities we support:
         //
         // 1. The base address is aligned exactly to the size of the region,

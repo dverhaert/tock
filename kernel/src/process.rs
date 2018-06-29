@@ -322,6 +322,13 @@ pub struct Process<'a> {
 
     /// Values kept so that we can print useful debug messages when apps fault.
     debug: ProcessDebug,
+
+    pub data: [RegionInfo; 8],
+}
+
+pub struct RegionInfo {
+    pub base: usize,
+    pub size: usize,
 }
 
 // Stores the current number of callbacks enqueued + processes in Running state
