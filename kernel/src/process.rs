@@ -1341,5 +1341,16 @@ impl<'a> Process<'a> {
         let _ = writer.write_fmt(format_args!(
             "\r\n in the app's folder and open the .lst file.\r\n\r\n"
         ));
+       
+        // Print out memory region data
+        for i in 0..8 {
+            let _ = writer.write_fmt(format_args!("\r\n Region: {}", i));
+
+            let base = self.data[i].base;
+            let size = self.data[i].base;
+
+            let _ = writer.write_fmt(format_args!("\r\n Base: {}", base));
+            let _ = writer.write_fmt(format_args!("\r\n Size: {}", size));
+        }
     }
 }
