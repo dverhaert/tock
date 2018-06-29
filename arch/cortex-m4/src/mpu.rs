@@ -165,7 +165,8 @@ impl kernel::mpu::MPU for MPU {
 
         if start % len == 0 {
             // Memory base aligned to memory size - straight forward case
-            let region_len = PowerOfTwo::floor(len as u32);
+            let region_len = PowerOfTwo::floor(len as u32); 
+            let protect_len = 2_u32.pow(region_len.exp::<u32>()) as usize;
             if region_len.exp::<u32>() < 5 {
                 // Region sizes must be 32 Bytes or larger
                 return None;
@@ -173,6 +174,12 @@ impl kernel::mpu::MPU for MPU {
                 // Region sizes must be 4GB or smaller
                 return None;
             }
+
+            debug!("Region num: {}", region_num);
+            // debug!("Region start: {:#010X}", start);
+            // debug!("Region length: {}", protect_len);
+            // debug!("Region end: {:#010X}\n", start + protect_len);
+        
 
             let xn = execute as u32;
             let ap = access as u32;
@@ -233,6 +240,7 @@ impl kernel::mpu::MPU for MPU {
             let max_subregion = min_subregion + len / subregion_size - 1;
 
             let region_len = PowerOfTwo::floor(region_size as u32);
+            let protect_len = 2_u32.pow(region_len.exp::<u32>()) as usize;
             if region_len.exp::<u32>() < 7 {
                 // Subregions only supported for regions sizes 128 bytes and up.
                 return None;
@@ -252,6 +260,12 @@ impl kernel::mpu::MPU for MPU {
 
             let xn = execute as u32;
             let ap = access as u32;
+
+            debug!("Region num: {}", region_num);
+            // debug!("Region start: {:#010X}", start);
+            // debug!("Region length: {}", protect_len);
+            // debug!("Region end: {:#010X}\n", start + protect_len);
+        
             Some(unsafe {
                 Region::new(
                     (region_start | 1 << 4 | (region_num & 0xf)) as u32,

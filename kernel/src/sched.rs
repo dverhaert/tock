@@ -39,6 +39,7 @@ pub fn kernel_loop<P: Platform, C: Chip>(
 
             for (i, p) in processes.iter_mut().enumerate() {
                 p.as_mut().map(|process| {
+                    debug!("Process {}", i);
                     do_process(platform, chip, process, callback::AppId::new(i), ipc);
                 });
                 if chip.has_pending_interrupts() {
