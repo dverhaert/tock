@@ -1,5 +1,7 @@
 //! Interface for configuring the Memory Protection Unit.
 
+use procs::Process;
+
 #[derive(Debug)]
 pub enum AccessPermission {
     //                                 Privileged  Unprivileged
@@ -71,6 +73,7 @@ pub trait MPU {
     /// `ap`        : access permissions as defined in Table 4.47 of the user
     ///               guide.
     fn create_region(
+        process: &mut Process,
         region_num: usize,
         start: usize,
         len: usize,
@@ -90,6 +93,7 @@ impl MPU for () {
     fn disable_mpu(&self) {}
 
     fn create_region(
+        _: &mut Process,
         _: usize,
         _: usize,
         _: usize,

@@ -4,6 +4,7 @@ use kernel;
 use kernel::common::cells::VolatileCell;
 use kernel::common::math::PowerOfTwo;
 use kernel::common::StaticRef;
+use kernel::procs::Process;
 
 /// Indicates whether the MPU is present and, if so, how many regions it
 /// supports.
@@ -142,6 +143,7 @@ impl kernel::mpu::MPU for MPU {
     }
 
     fn create_region(
+        process: &mut Process,
         region_num: usize,
         start: usize,
         len: usize,

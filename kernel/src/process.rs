@@ -484,12 +484,13 @@ impl<'a> Process<'a> {
         }
     }
 
-    pub fn setup_mpu<MPU: mpu::MPU>(&self, mpu: &MPU) {
+    pub fn setup_mpu<MPU: mpu::MPU>(&mut self, mpu: &MPU) {
         // Flash segment read/execute (no write)
         let flash_start = self.flash.as_ptr() as usize;
         let flash_len = self.flash.len();
 
         match MPU::create_region(
+            self,
             0,
             flash_start,
             flash_len,
@@ -507,6 +508,7 @@ impl<'a> Process<'a> {
         let data_len = self.memory.len();
 
         match MPU::create_region(
+            self,
             1,
             data_start,
             data_len,
@@ -535,6 +537,7 @@ impl<'a> Process<'a> {
         };
 
         match MPU::create_region(
+            self,
             2,
             grant_base as usize,
             grant_len as usize,
@@ -549,12 +552,15 @@ impl<'a> Process<'a> {
         }
 
         // Setup IPC MPU regions
-        for (i, region) in self.mpu_regions.iter().enumerate() {
+
+        let mpu_regions = self.mpu_regions.clone(); 
+        for (i, region) in mpu_regions.iter().enumerate() {
             if region.get().0.is_null() {
                 mpu.set_mpu(mpu::Region::empty(i + 3));
                 continue;
             }
             match MPU::create_region(
+                self,
                 i + 3,
                 region.get().0 as usize,
                 region.get().1.as_num::<u32>() as usize,
