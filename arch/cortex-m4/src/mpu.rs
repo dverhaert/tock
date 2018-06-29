@@ -174,6 +174,10 @@ impl kernel::mpu::MPU for MPU {
                 return None;
             }
 
+            debug!("Region start: {}", start);
+            debug!("Region length: {}", len);
+            debug!("Region end: {}", start + len);
+
             let xn = execute as u32;
             let ap = access as u32;
             Some(unsafe {
