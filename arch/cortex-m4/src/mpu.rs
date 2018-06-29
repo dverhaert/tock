@@ -169,7 +169,8 @@ impl kernel::mpu::MPU for MPU {
             // Memory base aligned to memory size - straight forward case
             let region_len = PowerOfTwo::floor(len as u32);
             
-            // Print start and size for MPU regions
+            // Print case, start and size for MPU regions
+            process.data[region_num].case = 1;
             process.data[region_num].base = start;
             process.data[region_num].size = 2_u32.pow(region_len.exp::<u32>()) as usize;
 
@@ -248,7 +249,8 @@ impl kernel::mpu::MPU for MPU {
             // Length has to be aligned to region size
             let region_len = PowerOfTwo::floor(region_size as u32);
 
-            // Print start and size for MPU regions
+            // Print case, start and size for MPU regions
+            process.data[region_num].case = 2;
             process.data[region_num].base = region_start;
             process.data[region_num].size = 2_u32.pow(region_len.exp::<u32>()) as usize;
 
