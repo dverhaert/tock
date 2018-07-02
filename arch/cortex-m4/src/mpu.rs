@@ -163,7 +163,8 @@ impl kernel::mpu::MPU for MPU {
         //
         // 2. Otherwise, we can use a larger MPU region and expose only MPU
         //    subregions, as long as the memory region's base address is aligned
-        //    to 1/8th of a larger region size.
+        //    to 1/8th of a larger region size (e.g. base address is 16384 and
+        //    is aligned to 1/8th of 65536 = 8192)
 
         if start % len == 0 {
             // Memory base aligned to memory size - straight forward case
@@ -202,12 +203,20 @@ impl kernel::mpu::MPU for MPU {
             // address with exactly one bit:
             //
             //      1 << (start.trailing_zeros())
+            // We'll go through this code with some numeric examples, and 
+            // indicate this by EX. The inputs of this example are the 
+            // following:
+            // region_num: 1
+            // start: 0x20006000
+            // len: 16384
             let subregion_size = {
+                // EX: tz = 0x20006000.trailing_zeros() = 13 
                 let tz = start.trailing_zeros();
                 // `start` should never be 0 because of that's taken care of by
                 // the previous branch, but in case it is, do the right thing
                 // anyway.
                 if tz < 32 {
+                    // EX (1) << 13 = 8192
                     (1 as usize) << tz
                 } else {
                     0
@@ -216,22 +225,23 @@ impl kernel::mpu::MPU for MPU {
 
             // Once we have a subregion size, we get a region size by
             // multiplying it by the number of subregions per region.
-            // 256 = 32*8;
+            // EX: 65536 = 8192*8;
             let region_size = subregion_size * 8;
             // Finally, we calculate the region base by finding the nearest
             // address below `start` that aligns with the region size.
-            // Round down and align to region_size, e.g. 512 = 576 - (576  % 256)
+            // EX: 0x20000000 = 0x20006000 - (0x20006000  % 65536)
             let region_start = start - (start % region_size);
 
-            // if 256 + 512 - 576 < len? 800
             // Check if we have enough memory to do this 
+            // EX: if 65536 + 0x20000000 - 0x20006000 < 16384
+            // EX: 40960 < 16384 --> False  
             if region_size + region_start - start < len {
                 // Sanity check that the amount left over space in the region
                 // after `start` is at least as large as the memory region we
                 // want to reference.
                 return None;
             }
-            // Length should be aligned to at least subregions, otherwise impossible to do
+            // EX: if 16384 % 8192 != 0 --> False
             if len % subregion_size != 0 {
                 // Sanity check that there is some integer X such that
                 // subregion_size * X == len so none of `len` is left over when
@@ -241,14 +251,15 @@ impl kernel::mpu::MPU for MPU {
 
             // The index of the first subregion to activate is the number of
             // regions between `region_start` (MPU) and `start` (memory).
-            // 4 = (288 - 256) / 8
+            // EX: 3 = (0x20006000 - 0x20000000) / 8192
             let min_subregion = (start - region_start) / subregion_size;
             // The index of the last subregion to activate is the number of
             // regions that fit in `len`, plus the `min_subregion`, minus one
             // (because subregions are zero-indexed).
-            //    = 4 + 800 / 16 - 1 = 53
+            // EX: 4 = 3 + 16384 / 8192 - 1 
             let max_subregion = min_subregion + len / subregion_size - 1;
             // Length has to be aligned to region size
+            // EX: 16 = log2(65536)
             let region_len = PowerOfTwo::floor(region_size as u32);
 
             // Print case, start and size for MPU regions
