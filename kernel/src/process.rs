@@ -556,7 +556,7 @@ impl Process<'a> {
 
         // Set MPU regions
         if let Err(s) = mpu.set_regions(&regions) {
-            panic!(s);
+            panic!(s); 
         }
     }
 

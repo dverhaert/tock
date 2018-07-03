@@ -145,14 +145,13 @@ impl kernel::mpu::MPU for MPU {
     fn set_regions(&self, regions: &[Option<Region>]) -> Result<(), &'static str> {
         for (i, entry) in regions.iter().enumerate() {
             if let Some(region) = entry {
-                if let ReturnCode::FAIL = write_registers(&region, i) {
-                    return Err("Infeasible MPU allocation. Base {:#x}, Length: {:#x}", 
-                               region.get_start(), region.get_len()));
+                if let ReturnCode::FAIL = write_registers(region, i) {
+                    return Err("TODO");
                 }
             }
         }
-    
-        Ok(()) 
+
+        Ok(())
     }
 }
 
