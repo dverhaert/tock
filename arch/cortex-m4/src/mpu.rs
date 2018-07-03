@@ -287,7 +287,11 @@ fn write_registers(region: &kernel::mpu::Region, region_num: usize) -> ReturnCod
 }
 
 fn parse_execute(region: &kernel::mpu::Region) -> Option<usize> {
-    None
+    match region.get_execute_permission() {
+        kernel::mpu::Permission::NoAccess => Some(0b0),
+        kernel::mpu::Permission::Full => Some(0b1),
+        _ => None,
+    }
 }
 
 fn parse_access(region: &kernel::mpu::Region) -> Option<usize> {
