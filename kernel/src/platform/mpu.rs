@@ -46,6 +46,26 @@ impl Region {
             execute: NoAccess,
         }
     }
+
+    pub fn get_start(&self) -> usize {
+        self.start
+    }
+
+    pub fn get_len(&self) -> usize {
+        self.len
+    }
+
+    pub fn get_read_permission(&self) -> Permission {
+        self.read
+    }
+
+    pub fn get_write_permission(&self) -> Permission {
+        self.write
+    }
+    
+    pub fn get_execute_permission(&self) -> Permission {
+        self.execute
+    }
 }
 
 pub trait MPU {
