@@ -294,8 +294,24 @@ fn parse_execute(region: &kernel::mpu::Region) -> Option<usize> {
     }
 }
 
+// Access permissions for the Cortex-M. Please refer to the datasheet for 
+// more information.
 fn parse_access(region: &kernel::mpu::Region) -> Option<usize> {
-    None
+    match region.get_read_permission() {
+        kernel::mpu::Permission::NoAccess => Some(0b000),
+        kernel::mpu::Permission::PrivilegedOnly => 
+            match region.get_write_permission() {
+                kernel::mpu::Permission::NoAccess => Some(0b101),
+                kernel::mpu::Permission::PrivilegedOnly => Some(0b001),
+                _ => None,
+            },
+        kernel::mpu::Permission::Full =>
+            match region.get_write_permission() {
+                kernel::mpu::Permission::NoAccess => Some(0b110),
+                kernel::mpu::Permission::PrivilegedOnly => Some(0b010),
+                kernel::mpu::Permission::Full => Some(0b011),
+            },
+    }
 }
 
 
