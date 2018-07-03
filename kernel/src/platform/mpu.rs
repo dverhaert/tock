@@ -1,8 +1,9 @@
 //! Interface for configuring the Memory Protection Unit.
 
 use returncode::ReturnCode;
+use platform::mpu::Permission::NoAccess;
 
-#[derive(Debug)]
+#[derive(Copy, Clone)]
 pub enum Permission {
     //                      Privileged  Unprivileged
     //                      Access      Access
@@ -11,12 +12,25 @@ pub enum Permission {
     Full = 0b10,            // V          V
 }
     
+#[derive(Copy, Clone)]
 pub struct Region {
     pub start: usize,
     pub len: usize,
     pub read: Permission,
     pub write: Permission,
     pub execute: Permission,
+}
+
+impl Region {
+    pub fn empty() -> Region {
+        Region {
+            start: 0,
+            len: 0,
+            read: NoAccess,
+            write: NoAccess,
+            execute: NoAccess,
+        }
+    }
 }
 
 pub trait MPU {
@@ -30,14 +44,15 @@ pub trait MPU {
     ///
     /// `region_num`: an MPU region number
     /// `new_region`: region to be created
-    /// `regions`   : array of regions 
+    /// `regions`   : array of option-wrapped regions 
     /// `overwrite` : whether the permissions of this region should take
     ///               precedence in the event of overlap with an existing
     ///               region.
     fn create_region(
+        &self,
         region_num: usize,
         new_region: Region,
-        regions: &mut [Region],
+        regions: &mut [Option<Region>],
         overwrite: bool
     ) -> ReturnCode;
 }
@@ -49,9 +64,10 @@ impl MPU for () {
     fn disable_mpu(&self) {}
 
     fn create_region(
+        &self,
         _: usize,
-        _: new_region,
-        _: &mut [Region],
+        _: Region,
+        _: &mut [Option<Region>],
         _: bool,
     ) -> ReturnCode {
         ReturnCode::SUCCESS 
