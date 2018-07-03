@@ -164,6 +164,16 @@ fn write_registers(region: &kernel::mpu::Region, region_num: usize) -> ReturnCod
     let start = region.get_start();
     let len = region.get_len();
 
+    let execute = match parse_execute(region) {
+        Some(execute) => execute,
+        None => return ReturnCode::FAIL,
+    };
+
+    let access = match parse_access(region) {
+        Some(access) => access,
+        None => return ReturnCode::FAIL,
+    };
+
     // There are two possibilities we support:
     //
     // 1. The base address is aligned exactly to the size of the region,
@@ -275,6 +285,15 @@ fn write_registers(region: &kernel::mpu::Region, region_num: usize) -> ReturnCod
         })
     }
 }
+
+fn parse_execute(region: &kernel::mpu::Region) -> Option<usize> {
+    None
+}
+
+fn parse_access(region: &kernel::mpu::Region) -> Option<usize> {
+    None
+}
+
 
 /*
 fn set_mpu(&self, region: Region) {
