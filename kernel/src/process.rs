@@ -483,41 +483,51 @@ impl Process<'a> {
     }
 
     pub fn setup_mpu<MPU: mpu::MPU>(&self, mpu: &MPU) {
+        // TODO: don't hardcode; define mpu function to return
+        let mut regions = [mpu::Region; 8];
+
         // Flash segment read/execute (no write)
-        let flash_start = self.flash.as_ptr() as usize;
-        let flash_len = self.flash.len();
+        let flash_region = mpu::Region {
+            start: self.flash.as_ptr() as usize,
+            len: self.flash.len(),
+            read: mpu::Permission::Full,
+            write: mpu::Permission::NoAccess,
+            execute: mpu::Permission::Full,
+        }
 
-        match MPU::create_region(
+        if let ReturnCode::FAIL = MPU::create_region(
             0,
-            flash_start,
-            flash_len,
-            mpu::ExecutePermission::ExecutionPermitted,
-            mpu::AccessPermission::ReadOnly,
+            flash_region,
+            &mut regions, 
+            false
         ) {
-            None => panic!(
-                "Infeasible MPU allocation. Base {:#x}, Length: {:#x}",
-                flash_start, flash_len
+            panic!(
+            "Infeasible MPU allocation. Base {:#x}, Length: {:#x}",
+            flash.start, flash.len 
             ),
-            Some(region) => mpu.set_mpu(region),
         }
 
-        let data_start = self.memory.as_ptr() as usize;
-        let data_len = self.memory.len();
+        // Process data 
+        let data_region = mpu::Region {
+            start: self.memory.as_ptr() as usize;
+            len: self.memory.len();
+            read: mpu::Permission::Full,
+            write: mpu::Permission::Full,
+            execute: mpu::Permission::Full,
+        }
 
-        match MPU::create_region(
+        if let ReturnCode::FAIL = MPU::create_region(
             1,
-            data_start,
-            data_len,
-            mpu::ExecutePermission::ExecutionPermitted,
-            mpu::AccessPermission::ReadWrite,
+            data_region,
+            &mut regions, 
+            false 
         ) {
-            None => panic!(
-                "Infeasible MPU allocation. Base {:#x}, Length: {:#x}",
-                data_start, data_len
+            panic!(
+            "Infeasible MPU allocation. Base {:#x}, Length: {:#x}",
+            data_region.start, data_region.len 
             ),
-            Some(region) => mpu.set_mpu(region),
         }
-
+        
         // Disallow access to grant region
         let grant_len = unsafe {
             math::PowerOfTwo::ceiling(
@@ -531,19 +541,25 @@ impl Process<'a> {
                 .offset(self.memory.len() as isize)
                 .offset(-(grant_len as isize))
         };
+        
+        let grant_region = mpu::Region {
+            start: grant_base,
+            len: grant_len,
+            read: mpu::Permission::PrivilegedOnly,
+            write: mpu::Permission::PrivilegedOnly,
+            execute: mpu::Permission::PrivilegedOnly,
+        }
 
-        match MPU::create_region(
-            2,
-            grant_base as usize,
-            grant_len as usize,
-            mpu::ExecutePermission::ExecutionNotPermitted,
-            mpu::AccessPermission::PrivilegedOnly,
+        if let ReturnCode::FAIL = MPU::create_region(
+            0,
+            grant_region,
+            &mut regions, 
+            true
         ) {
-            None => panic!(
-                "Infeasible MPU allocation. Base {:#x}, Length: {:#x}",
-                grant_base as usize, grant_len
+            panic!(
+            "Infeasible MPU allocation. Base {:#x}, Length: {:#x}",
+            grant_region.start, grant_region.len 
             ),
-            Some(region) => mpu.set_mpu(region),
         }
 
         // Setup IPC MPU regions
@@ -552,21 +568,25 @@ impl Process<'a> {
                 mpu.set_mpu(mpu::Region::empty(i + 3));
                 continue;
             }
-            match MPU::create_region(
+            
+            let ipc_region = mpu::Region {
+                start: region.get().0 as usize,
+                len: region.get().1.as_num::<u32>() as usize,
+                read: mpu::Permission::Full,
+                write: mpu::Permission::Full,
+                execute: mpu::Permission::Full,
+            }
+
+            if let ReturnCode::FAIL = MPU::create_region(
                 i + 3,
-                region.get().0 as usize,
-                region.get().1.as_num::<u32>() as usize,
-                mpu::ExecutePermission::ExecutionPermitted,
-                mpu::AccessPermission::ReadWrite,
+                ipc_region,
+                &mut regions,
+                false
             ) {
-                None => panic!(
-                    "Unexpected: Infeasible MPU allocation: Num: {}, \
-                     Base: {:#x}, Length: {:#x}",
-                    i + 3,
-                    region.get().0 as usize,
-                    region.get().1.as_num::<u32>()
+                panic!(
+                "Infeasible MPU allocation. Base {:#x}, Length: {:#x}",
+                ipc_region.start, ipc_region.len 
                 ),
-                Some(region) => mpu.set_mpu(region),
             }
         }
     }

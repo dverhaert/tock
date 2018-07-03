@@ -12,11 +12,11 @@ pub enum Permission {
 }
     
 pub struct Region {
-    start: usize,
-    len: usize,
-    read: Permission,
-    write: Permission,
-    execute: Permission,
+    pub start: usize,
+    pub len: usize,
+    pub read: Permission,
+    pub write: Permission,
+    pub execute: Permission,
 }
 
 pub trait MPU {
