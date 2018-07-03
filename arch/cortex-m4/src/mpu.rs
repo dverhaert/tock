@@ -141,13 +141,9 @@ impl kernel::mpu::MPU for MPU {
         regs.control.set(0b0);
     }
 
-    fn create_region(
-        region_num: usize,
-        start: usize,
-        len: usize,
-        execute: kernel::mpu::ExecutePermission,
-        access: kernel::mpu::AccessPermission,
-    ) -> Option<Region> {
+    fn set_regions(&self, regions: &[Option<Region>]) -> Result<(), &'static str> {}
+
+    fn create_bitmasks(mpu::Region) -> Option<RegionBitmasks> {
         if region_num >= 8 {
             // There are only 8 (0-indexed) regions available
             return None;
