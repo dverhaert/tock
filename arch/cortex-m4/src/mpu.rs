@@ -4,6 +4,7 @@ use kernel;
 use kernel::common::cells::VolatileCell;
 use kernel::common::math::PowerOfTwo;
 use kernel::common::StaticRef;
+use kernel::returncode::ReturnCode;
 
 /// Indicates whether the MPU is present and, if so, how many regions it
 /// supports.
@@ -141,12 +142,26 @@ impl kernel::mpu::MPU for MPU {
         regs.control.set(0b0);
     }
 
-    fn set_regions(&self, regions: &[Option<Region>]) -> Result<(), &'static str> {}
+    fn set_regions(&self, regions: &[Option<Region>]) -> Result<(), &'static str> {
+        let regions = regions
+                .iter()
+                .rev() 
+                .enumerate();
+    
+        for (i, entry) in regions {
+            if let Some(region) = entry {
+                write_registers
 
-    fn create_bitmasks(mpu::Region) -> Option<RegionBitmasks> {
+            }
+        }
+    
+        Ok(()) 
+    }
+
+    fn write_registers(mpu::Region) -> ReturnCode {
         if region_num >= 8 {
             // There are only 8 (0-indexed) regions available
-            return None;
+            return ReturnCode::FAIL;
         }
 
         // There are two possibilities we support:
@@ -167,7 +182,7 @@ impl kernel::mpu::MPU for MPU {
                 return None;
             } else if region_len.exp::<u32>() > 32 {
                 // Region sizes must be 4GB or smaller
-                return None;
+                return ReturnCode::FAIL;
             }
 
             let xn = execute as u32;
@@ -211,13 +226,13 @@ impl kernel::mpu::MPU for MPU {
                 // Sanity check that the amount left over space in the region
                 // after `start` is at least as large as the memory region we
                 // want to reference.
-                return None;
+                return ReturnCode::FAIL;
             }
             if len % subregion_size != 0 {
                 // Sanity check that there is some integer X such that
                 // subregion_size * X == len so none of `len` is left over when
                 // we take the max_subregion.
-                return None;
+                return ReturnCode::FAIL;
             }
 
             // The index of the first subregion to activate is the number of
@@ -231,10 +246,10 @@ impl kernel::mpu::MPU for MPU {
             let region_len = PowerOfTwo::floor(region_size as u32);
             if region_len.exp::<u32>() < 7 {
                 // Subregions only supported for regions sizes 128 bytes and up.
-                return None;
+                return ReturnCode::FAIL;
             } else if region_len.exp::<u32>() > 32 {
                 // Region sizes must be 4GB or smaller
-                return None;
+                return ReturnCode::FAIL;
             }
 
             // Turn the min/max subregion into a bitfield where all bits are `1`

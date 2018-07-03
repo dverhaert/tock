@@ -554,6 +554,7 @@ impl Process<'a> {
             regions[priority] = Some(ipc_region); 
         }
 
+        // Set MPU regions
         if let Err(s) = mpu.set_regions(&regions) {
             panic!(s);
         }
