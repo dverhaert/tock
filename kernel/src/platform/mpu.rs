@@ -1,6 +1,5 @@
 //! Interface for configuring the Memory Protection Unit.
 
-use returncode::ReturnCode;
 use platform::mpu::Permission::NoAccess;
 
 #[derive(Copy, Clone)]
@@ -14,14 +13,30 @@ pub enum Permission {
     
 #[derive(Copy, Clone)]
 pub struct Region {
-    pub start: usize,
-    pub len: usize,
-    pub read: Permission,
-    pub write: Permission,
-    pub execute: Permission,
+    start: usize,
+    len: usize,
+    read: Permission,
+    write: Permission,
+    execute: Permission,
 }
 
 impl Region {
+    pub fn new(
+        start: usize,
+        len: usize,
+        read: Permission,
+        write: Permission,
+        execute: Permission
+    ) -> Region {
+        Region {
+            start: start,
+            len: len,
+            read: read,
+            write: write,
+            execute: execute,
+        }
+    }
+
     pub fn empty() -> Region {
         Region {
             start: 0,
@@ -34,42 +49,27 @@ impl Region {
 }
 
 pub trait MPU {
-    /// Enable the MPU.
+    /// Enables the MPU.
     fn enable_mpu(&self);
 
-    /// Completely disable the MPU.
+    /// Disables the MPU.
     fn disable_mpu(&self);
 
-    /// Creates a new MPU-specific memory protection region
+    /// Allocates memory protection regions.
     ///
-    /// `region_num`: an MPU region number
-    /// `new_region`: region to be created
-    /// `regions`   : array of option-wrapped regions 
-    /// `overwrite` : whether the permissions of this region should take
-    ///               precedence in the event of overlap with an existing
-    ///               region.
-    fn create_region(
-        &self,
-        region_num: usize,
-        new_region: Region,
-        regions: &mut [Option<Region>],
-        overwrite: bool
-    ) -> ReturnCode;
+    /// `regions`: array of regions to be allocated. The index of the array
+    ///            encodes the priority of the region. In the event of an 
+    ///            overlap between regions, the implementor must ensure 
+    ///            that the permissions of the region with higher priority
+    ///            take precendence.
+    fn set_regions(&self, regions: &[Option<Region>]) -> Result<(), &'static str>;
 }
 
-/// Noop implementation of MPU trait
+/// No-op implementation of MPU trait
 impl MPU for () {
     fn enable_mpu(&self) {}
 
     fn disable_mpu(&self) {}
 
-    fn create_region(
-        &self,
-        _: usize,
-        _: Region,
-        _: &mut [Option<Region>],
-        _: bool,
-    ) -> ReturnCode {
-        ReturnCode::SUCCESS 
-    } 
+    fn set_regions(&self, _: &[Option<Region>]) -> Result<(), &'static str> { Ok(()) }
 }
