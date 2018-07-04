@@ -320,6 +320,16 @@ pub struct Process<'a> {
 
     /// Values kept so that we can print useful debug messages when apps fault.
     debug: ProcessDebug,
+
+    pub data: [RegionInfo; 8],
+}
+
+pub struct RegionInfo {
+    pub case: u8,
+    pub base: usize,
+    pub size: usize,
+    pub len: usize,
+    pub align: usize,
 }
 
 // Stores the current number of callbacks enqueued + processes in Running state
@@ -486,6 +496,14 @@ impl Process<'a> {
         // TODO: don't hardcode; define mpu function to return
         let mut regions = [None; 8];
 
+        for i in 0..8 {
+            self.data[i].case = 0;
+            self.data[i].base = 0;
+            self.data[i].size = 0;
+            self.data[i].len = 0;
+            self.data[i].align = 0;
+        }
+      
         // Flash segment: priority 0 
         let flash_region = mpu::Region::new(
             self.flash.as_ptr() as usize,
@@ -524,6 +542,7 @@ impl Process<'a> {
         };
         
         let grant_region = mpu::Region::new( 
+
             grant_base as usize,
             grant_len as usize,
             mpu::Permission::PrivilegedOnly,
@@ -536,7 +555,6 @@ impl Process<'a> {
         // IPC MPU regions: priorities 3 and higher
         for (i, region) in self.mpu_regions.iter().enumerate() {
             let priority = i + 3;
-
             if region.get().0.is_null() {
                 let ipc_region = mpu::Region::empty();
                 regions[priority] = Some(ipc_region);
@@ -1316,5 +1334,24 @@ impl Process<'a> {
         let _ = writer.write_fmt(format_args!(
             "\r\n in the app's folder and open the .lst file.\r\n\r\n"
         ));
+       
+        // Print out memory region data
+        for i in 0..8 {
+            let case = self.data[i].case;
+            let base = self.data[i].base;
+            let size = self.data[i].size;
+            let len = self.data[i].len;
+            let align = self.data[i].align;
+
+            let _ = writer.write_fmt(format_args!("\r\n Region {}", i));
+            let _ = writer.write_fmt(format_args!("\r\n Case: {}", case));
+            let _ = writer.write_fmt(format_args!("\r\n Base: {:#010X}", base));
+            let _ = writer.write_fmt(format_args!("\r\n Size: {}", size));
+            let _ = writer.write_fmt(format_args!("\r\n Len: {}", len));
+            let _ = writer.write_fmt(format_args!("\r\n size % len: {}", align));
+            let _ = writer.write_fmt(format_args!("\r\n"));
+        }
+            
+        let _ = writer.write_fmt(format_args!("\r\n"));
     }
 }

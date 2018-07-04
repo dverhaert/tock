@@ -21,6 +21,8 @@ const KERNEL_TICK_DURATION_US: u32 = 10000;
 /// Skip re-scheduling a process if its quanta is nearly exhausted
 const MIN_QUANTA_THRESHOLD_US: u32 = 500;
 
+static mut COUNT: u32 = 0;
+
 /// Main loop.
 pub fn kernel_loop<P: Platform, C: Chip>(
     platform: &P,
@@ -44,6 +46,12 @@ pub fn kernel_loop<P: Platform, C: Chip>(
                 if chip.has_pending_interrupts() {
                     break;
                 }
+            }
+
+            COUNT += 1;
+            
+            if COUNT >= 1000 {
+                panic!("");
             }
 
             chip.atomic(|| {

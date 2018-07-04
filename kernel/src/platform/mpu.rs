@@ -1,6 +1,6 @@
 //! Interface for configuring the Memory Protection Unit.
 
-use platform::mpu::Permission::NoAccess;
+use platform::mpu::Permission;
 
 #[derive(Copy, Clone)]
 pub enum Permission {
@@ -41,9 +41,9 @@ impl Region {
         Region {
             start: 0,
             len: 0,
-            read: NoAccess,
-            write: NoAccess,
-            execute: NoAccess,
+            read: Permission::NoAccess,
+            write: Permission::NoAccess,
+            execute: Permission::NoAccess,
         }
     }
 
@@ -83,6 +83,7 @@ pub trait MPU {
     ///            that the permissions of the region with higher priority
     ///            take precendence.
     fn set_regions(&self, regions: &[Option<Region>]) -> Result<(), &'static str>;
+
 }
 
 /// No-op implementation of MPU trait
@@ -92,4 +93,5 @@ impl MPU for () {
     fn disable_mpu(&self) {}
 
     fn set_regions(&self, _: &[Option<Region>]) -> Result<(), &'static str> { Ok(()) }
+
 }
