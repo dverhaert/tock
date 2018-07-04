@@ -17,16 +17,14 @@ use syscall::Syscall;
 use tbfheader;
 
 /// This is used in the hardfault handler.
-#[allow(private_no_mangle_statics)]
 #[no_mangle]
 #[used]
-static mut SYSCALL_FIRED: usize = 0;
+pub static mut SYSCALL_FIRED: usize = 0;
 
 /// This is used in the hardfault handler.
-#[allow(private_no_mangle_statics)]
 #[no_mangle]
 #[used]
-static mut APP_FAULT: usize = 0;
+pub static mut APP_FAULT: usize = 0;
 
 /// This is used in the hardfault handler.
 #[allow(private_no_mangle_statics)]
@@ -341,7 +339,7 @@ pub fn processes_blocked() -> bool {
     unsafe { HAVE_WORK.get() == 0 }
 }
 
-impl<'a> Process<'a> {
+impl Process<'a> {
     pub fn schedule_ipc(&mut self, from: AppId, cb_type: IPCType) {
         unsafe {
             HAVE_WORK.set(HAVE_WORK.get() + 1);
@@ -494,12 +492,10 @@ impl<'a> Process<'a> {
         }
     }
 
-    pub fn setup_mpu<MPU: mpu::MPU>(&mut self, mpu: &MPU) {
-        // Flash segment read/execute (no write)
-        let flash_start = self.flash.as_ptr() as usize;
-        let flash_len = self.flash.len();
+    pub fn setup_mpu<MPU: mpu::MPU>(&self, mpu: &MPU) {
+        // TODO: don't hardcode; define mpu function to return
+        let mut regions = [None; 8];
 
-        // Initialize memory region data to zero
         for i in 0..8 {
             self.data[i].case = 0;
             self.data[i].base = 0;
@@ -507,96 +503,81 @@ impl<'a> Process<'a> {
             self.data[i].len = 0;
             self.data[i].align = 0;
         }
+      
+        // Flash segment: priority 0 
+        let flash_region = mpu::Region::new(
+            self.flash.as_ptr() as usize,
+            self.flash.len(),
+            mpu::Permission::Full,
+            mpu::Permission::NoAccess,
+            mpu::Permission::Full,
+        );
 
-        match MPU::create_region(
-            self,
-            0,
-            flash_start,
-            flash_len,
-            mpu::ExecutePermission::ExecutionPermitted,
-            mpu::AccessPermission::ReadOnly,
-        ) {
-            None => panic!(
-                "Infeasible MPU allocation. Base {:#x}, Length: {:#x}",
-                flash_start, flash_len
-            ),
-            Some(region) => mpu.set_mpu(region),
-        }
+        regions[0] = Some(flash_region);
 
-        let data_start = self.memory.as_ptr() as usize;
-        let data_len = self.memory.len();
+        // RAM segment: priority 1 
+        let memory_region = mpu::Region::new(
+            self.memory.as_ptr() as usize,
+            self.memory.len(),
+            mpu::Permission::Full,
+            mpu::Permission::Full,
+            mpu::Permission::Full
+        );
 
-        match MPU::create_region(
-            self,
-            1,
-            data_start,
-            data_len,
-            mpu::ExecutePermission::ExecutionPermitted,
-            mpu::AccessPermission::ReadWrite,
-        ) {
-            None => panic!(
-                "Infeasible MPU allocation. Base {:#x}, Length: {:#x}",
-                data_start, data_len
-            ),
-            Some(region) => mpu.set_mpu(region),
-        }
+        regions[1] = Some(memory_region); 
 
-        // Disallow access to grant region
+        // Grant region: priority 2 
         let grant_len = unsafe {
             math::PowerOfTwo::ceiling(
                 self.memory.as_ptr().offset(self.memory.len() as isize) as u32
                     - (self.kernel_memory_break as u32),
             ).as_num::<u32>()
         };
+
         let grant_base = unsafe {
             self.memory
                 .as_ptr()
                 .offset(self.memory.len() as isize)
                 .offset(-(grant_len as isize))
         };
+        
+        let grant_region = mpu::Region::new( 
 
-        match MPU::create_region(
-            self,
-            2,
             grant_base as usize,
             grant_len as usize,
-            mpu::ExecutePermission::ExecutionNotPermitted,
-            mpu::AccessPermission::PrivilegedOnly,
-        ) {
-            None => panic!(
-                "Infeasible MPU allocation. Base {:#x}, Length: {:#x}",
-                grant_base as usize, grant_len
-            ),
-            Some(region) => mpu.set_mpu(region),
-        }
+            mpu::Permission::PrivilegedOnly,
+            mpu::Permission::PrivilegedOnly,
+            mpu::Permission::PrivilegedOnly,
+        );
 
-        // Setup IPC MPU regions
+        regions[2] = Some(grant_region);
 
-        let mpu_regions = self.mpu_regions.clone(); 
-        for (i, region) in mpu_regions.iter().enumerate() {
+        // IPC MPU regions: priorities 3 and higher
+        for (i, region) in self.mpu_regions.iter().enumerate() {
+            let priority = i + 3;
             if region.get().0.is_null() {
-                mpu.set_mpu(mpu::Region::empty(i + 3));
+                let ipc_region = mpu::Region::empty();
+                regions[priority] = Some(ipc_region);
                 continue;
             }
-            match MPU::create_region(
-                self,
-                i + 3,
+            
+            let ipc_region = mpu::Region::new(
                 region.get().0 as usize,
                 region.get().1.as_num::<u32>() as usize,
-                mpu::ExecutePermission::ExecutionPermitted,
-                mpu::AccessPermission::ReadWrite,
-            ) {
-                None => panic!(
-                    "Unexpected: Infeasible MPU allocation: Num: {}, \
-                     Base: {:#x}, Length: {:#x}",
-                    i + 3,
-                    region.get().0 as usize,
-                    region.get().1.as_num::<u32>()
-                ),
-                Some(region) => mpu.set_mpu(region),
-            }
+                mpu::Permission::Full,
+                mpu::Permission::Full,
+                mpu::Permission::Full,
+            );
+
+            regions[priority] = Some(ipc_region); 
+        }
+
+        // Set MPU regions
+        if let Err(s) = mpu.set_regions(&regions) {
+            panic!(s); 
         }
     }
+
 
     pub fn add_mpu_region(&self, base: *const u8, size: u32) -> bool {
         if size >= 16 && size.count_ones() == 1 && (base as u32) % size == 0 {

@@ -4,6 +4,7 @@ use kernel;
 use kernel::common::cells::VolatileCell;
 use kernel::common::math::PowerOfTwo;
 use kernel::common::StaticRef;
+use kernel::ReturnCode;
 use kernel::procs::Process;
 
 /// Indicates whether the MPU is present and, if so, how many regions it
@@ -31,6 +32,7 @@ pub struct MpuType {
 /// Described in section 4.5 of
 /// <http://infocenter.arm.com/help/topic/com.arm.doc.dui0553a/DUI0553A_cortex_m4_dgug.pdf>
 pub struct MpuRegisters {
+    // TODO: Change the registers to ReadWrite/ReadOnly instead of VolatileCell
     pub mpu_type: VolatileCell<MpuType>,
 
     /// The control register:
@@ -115,45 +117,27 @@ impl MPU {
     pub const unsafe fn new() -> MPU {
         MPU(MPU_BASE_ADDRESS)
     }
-}
 
-type Region = kernel::mpu::Region;
-
-impl kernel::mpu::MPU for MPU {
-    fn enable_mpu(&self) {
+    fn write_registers(&self, region: &kernel::mpu::Region, region_num: usize) -> ReturnCode {
         let regs = &*self.0;
 
-        // Enable the MPU, disable it during HardFault/NMI handlers, allow
-        // privileged code access to all unprotected memory.
-        regs.control.set(0b101);
-
-        let mpu_type = regs.mpu_type.get();
-        let regions = mpu_type.data_regions.get();
-        if regions != 8 {
-            panic!(
-                "Tock currently assumes 8 MPU regions. This chip has {}",
-                regions
-            );
-        }
-    }
-
-    fn disable_mpu(&self) {
-        let regs = &*self.0;
-        regs.control.set(0b0);
-    }
-
-    fn create_region(
-        process: &mut Process,
-        region_num: usize,
-        start: usize,
-        len: usize,
-        execute: kernel::mpu::ExecutePermission,
-        access: kernel::mpu::AccessPermission,
-    ) -> Option<Region> {
         if region_num >= 8 {
             // There are only 8 (0-indexed) regions available
-            return None;
+            return ReturnCode::FAIL;
         }
+
+        let start = region.get_start();
+        let len = region.get_len();
+
+        let execute = match parse_execute(region) {
+            Some(execute) => execute,
+            None => return ReturnCode::FAIL,
+        };
+
+        let access = match parse_access(region) {
+            Some(access) => access,
+            None => return ReturnCode::FAIL,
+        };
 
         // There are two possibilities we support:
         //
@@ -179,20 +163,16 @@ impl kernel::mpu::MPU for MPU {
 
             if region_len.exp::<u32>() < 5 {
                 // Region sizes must be 32 Bytes or larger
-                return None;
+                return ReturnCode::FAIL;
             } else if region_len.exp::<u32>() > 32 {
                 // Region sizes must be 4GB or smaller
-                return None;
+                return ReturnCode::FAIL;
             }
 
             let xn = execute as u32;
             let ap = access as u32;
-            Some(unsafe {
-                Region::new(
-                    (start | 1 << 4 | (region_num & 0xf)) as u32,
-                    1 | (region_len.exp::<u32>() - 1) << 1 | ap << 24 | xn << 28,
-                )
-            })
+            regs.region_base_address.set((start | 1 << 4 | (region_num & 0xf)) as u32);
+            regs.region_attributes_and_size.set(1 | (region_len.exp::<u32>() - 1) << 1 | ap << 24 | xn << 28);            
         } else {
             // Memory base not aligned to memory size
 
@@ -239,14 +219,14 @@ impl kernel::mpu::MPU for MPU {
                 // Sanity check that the amount left over space in the region
                 // after `start` is at least as large as the memory region we
                 // want to reference.
-                return None;
+                return ReturnCode::FAIL;
             }
             // EX: if 16384 % 8192 != 0 --> False
             if len % subregion_size != 0 {
                 // Sanity check that there is some integer X such that
                 // subregion_size * X == len so none of `len` is left over when
                 // we take the max_subregion.
-                return None;
+                return ReturnCode::FAIL;
             }
 
             // The index of the first subregion to activate is the number of
@@ -271,10 +251,10 @@ impl kernel::mpu::MPU for MPU {
 
             if region_len.exp::<u32>() < 7 {
                 // Subregions only supported for regions sizes 128 bytes and up.
-                return None;
+                return ReturnCode::FAIL;
             } else if region_len.exp::<u32>() > 32 {
                 // Region sizes must be 4GB or smaller
-                return None;
+                return ReturnCode::FAIL;
             }
 
             // Turn the min/max subregion into a bitfield where all bits are `1`
@@ -288,24 +268,93 @@ impl kernel::mpu::MPU for MPU {
 
             let xn = execute as u32;
             let ap = access as u32;
-            Some(unsafe {
-                Region::new(
-                    (region_start | 1 << 4 | (region_num & 0xf)) as u32,
-                    1
-                        | subregion_mask << 8
-                        | (region_len.exp::<u32>() - 1) << 1
-                        | ap << 24
-                        | xn << 28,
-                )
-            })
+            regs.region_base_address.set((region_start | 1 << 4 | (region_num & 0xf)) as u32);
+            regs.region_attributes_and_size.set(
+                1
+                    | subregion_mask << 8
+                    | (region_len.exp::<u32>() - 1) << 1
+                    | ap << 24
+                    | xn << 28,
+            );
+        }
+        ReturnCode::SUCCESS
+    }
+}
+
+type Region = kernel::mpu::Region;
+
+impl kernel::mpu::MPU for MPU {
+    fn enable_mpu(&self) {
+        let regs = &*self.0;
+
+        // Enable the MPU, disable it during HardFault/NMI handlers, allow
+        // privileged code access to all unprotected memory.
+        regs.control.set(0b101);
+
+        let mpu_type = regs.mpu_type.get();
+        let regions = mpu_type.data_regions.get();
+        if regions != 8 {
+            panic!(
+                "Tock currently assumes 8 MPU regions. This chip has {}",
+                regions
+            );
         }
     }
 
-    fn set_mpu(&self, region: Region) {
+    fn disable_mpu(&self) {
         let regs = &*self.0;
+        regs.control.set(0b0);
+    }
 
-        regs.region_base_address.set(region.base_address());
+    fn set_regions(&self, regions: &[Option<Region>]) -> Result<(), &'static str> {
+        for (i, entry) in regions.iter().enumerate() {
+            if let Some(region) = entry {
+                if let ReturnCode::FAIL = self.write_registers(region, i) {
+                    return Err("TODO");
+                }
+            }
+        }
 
-        regs.region_attributes_and_size.set(region.attributes());
+        Ok(())
     }
 }
+ 
+// Parse execute permission into bitmask
+fn parse_execute(region: &kernel::mpu::Region) -> Option<usize> {
+    match region.get_execute_permission() {
+        kernel::mpu::Permission::NoAccess => Some(0b0),
+        kernel::mpu::Permission::Full => Some(0b1),
+        _ => None,
+    }
+}
+
+// Parse access permission into a bitmask
+fn parse_access(region: &kernel::mpu::Region) -> Option<usize> {
+    match region.get_read_permission() {
+        kernel::mpu::Permission::NoAccess => Some(0b000),
+        kernel::mpu::Permission::PrivilegedOnly => 
+            match region.get_write_permission() {
+                kernel::mpu::Permission::NoAccess => Some(0b101),
+                kernel::mpu::Permission::PrivilegedOnly => Some(0b001),
+                _ => None,
+            },
+        kernel::mpu::Permission::Full =>
+            match region.get_write_permission() {
+                kernel::mpu::Permission::NoAccess => Some(0b110),
+                kernel::mpu::Permission::PrivilegedOnly => Some(0b010),
+                kernel::mpu::Permission::Full => Some(0b011),
+            },
+    }
+}
+
+
+
+/*
+fn set_mpu(&self, region: Region) {
+    
+
+    regs.region_base_address.set(region.base_address());
+
+    regs.region_attributes_and_size.set(region.attributes());
+}
+*/
