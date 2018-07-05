@@ -4,6 +4,7 @@ use kernel;
 use kernel::common::cells::VolatileCell;
 use kernel::common::math::PowerOfTwo;
 use kernel::common::StaticRef;
+use kernel::common::regs::{ReadWrite};
 use kernel::ReturnCode;
 
 /// Indicates whether the MPU is present and, if so, how many regions it
@@ -51,7 +52,7 @@ pub struct MpuRegisters {
     /// 2     | PRIVDEFENA | 0=Any memory access not explicitly enabled causes fault
     ///       |            | 1=Privledged mode code can read any memory address
     /// ```
-    pub control: VolatileCell<u32>,
+    pub control: ReadWrite<u32>,
 
     /// Selects the region number (zero-indexed) referenced by the region base
     /// address and region attribute and size registers.
@@ -61,7 +62,7 @@ pub struct MpuRegisters {
     /// ----- | -------- | -----------------------------
     /// [7:0] | REGION   | Region for writes to MPU_RBAR or MPU_RASR. Range 0-7.
     /// ```
-    pub region_number: VolatileCell<u32>,
+    pub region_number: ReadWrite<u32>,
 
     /// Defines the base address of the currently selected MPU region.
     ///
@@ -82,7 +83,7 @@ pub struct MpuRegisters {
     ///           |         |      Update base address for chosen region
     /// [3:0]     | REGION  | {W} (see VALID) ; {R} return region_number reg
     /// ```
-    pub region_base_address: VolatileCell<u32>,
+    pub region_base_address: ReadWrite<u32>,
 
     /// Defines the region size and memory attributes of the selected MPU
     /// region. The bits are defined as in 4.5.5 of the Cortex-M4 user guide:
@@ -103,8 +104,71 @@ pub struct MpuRegisters {
     /// 27    |        | Unused
     /// 28    | XN     | Instruction access disable
     /// ```
-    pub region_attributes_and_size: VolatileCell<u32>,
+    pub region_attributes_and_size: ReadWrite<u32>,
 }
+
+register_bitfields![u32,
+    Type [
+        /// Number of supported MPU instruction regions
+        IREGION OFFSET(16) NUMBITS(8) [],
+        /// Number of supported MPU data regions
+        DREGION OFFSET(8) NUMBITS(8) [],
+        /// Support for unified or separate instruction
+        /// and data memory regions
+        SEPARATE OFFSET(0) NUMBITS(1) []
+    ],
+
+    Control [
+        /// Enables privileged software access to the default
+        /// memory map
+        PRIVDEFENA 2, 
+        /// Enables the operation of MPU during hard fault, NMI, 
+        /// and FAULTMASK handlers
+        HFNMIENA 1,
+        /// Enables the MPU
+        ENABLE 0
+    ],
+
+    RegionNumber [
+        /// MPU region
+        REGION OFFSET(0) NUMBITS(8) []
+    ],
+
+    RegionBaseAddress [
+        ADDR OFFSET(5) NUMBITS(27) []
+
+
+    ],
+
+    RegionAttributeAndSize [
+        XN OFFSET(28) NUMBITS(1) [
+            Enable = 0,
+            Disable = 1 
+        ],
+        AP OFFSET(24) NUMBITS(3) [
+            //                                 Privileged  Unprivileged
+            //                                 Access      Access
+            NoAccess = 0b000,               // --          --
+            PrivilegedOnly = 0b001,         // RW          --
+            UnprivilegedReadOnly = 0b010,   // RW          R-
+            ReadWrite = 0b011,              // RW          RW
+            Reserved = 0b100,               // undef       undef
+            PrivilegedOnlyReadOnly = 0b101, // R-          --
+            ReadOnly = 0b110,               // R-          R-
+            ReadOnlyAlias = 0b111          // R-          R-
+        ],
+        SRD8 OFFSET(15) NUMBITS(1) [],
+        SRD7 OFFSET(14) NUMBITS(1) [],
+        SRD6 OFFSET(13) NUMBITS(1) [],
+        SRD5 OFFSET(12) NUMBITS(1) [],
+        SRD4 OFFSET(11) NUMBITS(1) [],
+        SRD3 OFFSET(10) NUMBITS(1) [],
+        SRD2 OFFSET(9) NUMBITS(1) [],
+        SRD1 OFFSET(8) NUMBITS(1) [],
+        SIZE OFFSET(1) NUMBITS(5) [],
+        ENABLE OFFSET(0) NUMBITS(1) []
+    ]
+];
 
 const MPU_BASE_ADDRESS: StaticRef<MpuRegisters> =
     unsafe { StaticRef::new(0xE000ED90 as *const MpuRegisters) };
