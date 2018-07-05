@@ -128,28 +128,22 @@ impl MPU {
         let start = region.get_start();
         let len = region.get_len();
         
+        // Empty region
         if len == 0 {
-            debug!("ipc write");
             regs.region_base_address.set((region_num as u32) | 1 << 4);
             regs.region_attributes_and_size.set(0);
-            debug!("finished ipc write");
             return ReturnCode::SUCCESS;
         }
 
-        debug!("STarting parsing");
         let execute = match MPU::parse_execute(region) {
             Some(execute) => execute,
             None => return ReturnCode::FAIL,
         };
-        debug!("Passed execute");
-        debug!("Execute is {:#x}", execute);
 
         let access = match MPU::parse_access(region) {
             Some(access) => access,
             None => return ReturnCode::FAIL,
         };
-        debug!("Passed access");
-        debug!("Access is {:#x}", access);
 
         // There are two possibilities we support:
         //
@@ -261,8 +255,8 @@ impl MPU {
     // Parse execute permission into bitmask
     fn parse_execute(region: &kernel::mpu::Region) -> Option<usize> {
         match region.get_execute_permission() {
-            kernel::mpu::Permission::NoAccess => Some(0b0),
-            kernel::mpu::Permission::Full => Some(0b1),
+            kernel::mpu::Permission::NoAccess => Some(0b1),
+            kernel::mpu::Permission::Full => Some(0b0),
             _ => None,
         }
     }
@@ -297,8 +291,6 @@ impl kernel::mpu::MPU for MPU {
         // privileged code access to all unprotected memory.
         regs.control.set(0b101);
 
-        debug!("Set control");
-
         let mpu_type = regs.mpu_type.get();
         let regions = mpu_type.data_regions.get();
         if regions != 8 {
@@ -307,7 +299,6 @@ impl kernel::mpu::MPU for MPU {
                 regions
             );
         }
-        debug!("Passed num test");
     }
 
     fn disable_mpu(&self) {
@@ -317,13 +308,10 @@ impl kernel::mpu::MPU for MPU {
 
     fn allocate_regions(&self, regions: &[Region]) -> Result<(), usize> {
         for (index, region) in regions.iter().enumerate() {
-            debug!("Starting region {}", index);
             if let ReturnCode::FAIL = self.write_registers(region, index) {
-                debug!("Error with region {}", index);
                 return Err(index);
             }
         }
-        debug!("Set up all regions successfully");
         Ok(())
     }
 }
