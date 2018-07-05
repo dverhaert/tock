@@ -1,7 +1,5 @@
 //! Interface for configuring the Memory Protection Unit.
 
-use platform::mpu::Permission::NoAccess;
-
 #[derive(Copy, Clone)]
 pub enum Permission {
     //                  Privileged  Unprivileged
@@ -41,9 +39,9 @@ impl Region {
         Region {
             start: 0,
             len: 0,
-            read: NoAccess,
-            write: NoAccess,
-            execute: NoAccess,
+            read: Permission::NoAccess,
+            write: Permission::NoAccess,
+            execute: Permission::NoAccess,
         }
     }
 
