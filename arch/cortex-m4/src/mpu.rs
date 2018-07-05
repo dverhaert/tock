@@ -128,12 +128,12 @@ impl MPU {
         let start = region.get_start();
         let len = region.get_len();
 
-        let execute = match parse_execute(region) {
+        let execute = match MPU::parse_execute(region) {
             Some(execute) => execute,
             None => return ReturnCode::FAIL,
         };
 
-        let access = match parse_access(region) {
+        let access = match MPU::parse_access(region) {
             Some(access) => access,
             None => return ReturnCode::FAIL,
         };
@@ -244,6 +244,34 @@ impl MPU {
         }
         ReturnCode::SUCCESS
     }
+
+    // Parse execute permission into bitmask
+    fn parse_execute(region: &kernel::mpu::Region) -> Option<usize> {
+        match region.get_execute_permission() {
+            kernel::mpu::Permission::NoAccess => Some(0b0),
+            kernel::mpu::Permission::Full => Some(0b1),
+            _ => None,
+        }
+    }
+
+    // Parse access permission into a bitmask
+    fn parse_access(region: &kernel::mpu::Region) -> Option<usize> {
+        match region.get_read_permission() {
+            kernel::mpu::Permission::NoAccess => Some(0b000),
+            kernel::mpu::Permission::PrivilegedOnly => 
+                match region.get_write_permission() {
+                    kernel::mpu::Permission::NoAccess => Some(0b101),
+                    kernel::mpu::Permission::PrivilegedOnly => Some(0b001),
+                    _ => None,
+                },
+            kernel::mpu::Permission::Full =>
+                match region.get_write_permission() {
+                    kernel::mpu::Permission::NoAccess => Some(0b110),
+                    kernel::mpu::Permission::PrivilegedOnly => Some(0b010),
+                    kernel::mpu::Permission::Full => Some(0b011),
+                },
+        }
+    }
 }
 
 type Region = kernel::mpu::Region;
@@ -279,33 +307,5 @@ impl kernel::mpu::MPU for MPU {
         }
 
         Ok(())
-    }
-}
- 
-// Parse execute permission into bitmask
-fn parse_execute(region: &kernel::mpu::Region) -> Option<usize> {
-    match region.get_execute_permission() {
-        kernel::mpu::Permission::NoAccess => Some(0b0),
-        kernel::mpu::Permission::Full => Some(0b1),
-        _ => None,
-    }
-}
-
-// Parse access permission into a bitmask
-fn parse_access(region: &kernel::mpu::Region) -> Option<usize> {
-    match region.get_read_permission() {
-        kernel::mpu::Permission::NoAccess => Some(0b000),
-        kernel::mpu::Permission::PrivilegedOnly => 
-            match region.get_write_permission() {
-                kernel::mpu::Permission::NoAccess => Some(0b101),
-                kernel::mpu::Permission::PrivilegedOnly => Some(0b001),
-                _ => None,
-            },
-        kernel::mpu::Permission::Full =>
-            match region.get_write_permission() {
-                kernel::mpu::Permission::NoAccess => Some(0b110),
-                kernel::mpu::Permission::PrivilegedOnly => Some(0b010),
-                kernel::mpu::Permission::Full => Some(0b011),
-            },
     }
 }
