@@ -528,7 +528,7 @@ impl Process<'a> {
             grant_len as usize,
             mpu::Permission::PrivilegedOnly,
             mpu::Permission::PrivilegedOnly,
-            mpu::Permission::PrivilegedOnly,
+            mpu::Permission::NoAccess,
         );
 
         regions[2] = grant_region;
