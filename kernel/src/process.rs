@@ -535,22 +535,19 @@ impl Process<'a> {
 
         // IPC regions: priorities 3-7
         for (i, region) in self.mpu_regions.iter().enumerate() {
-            let index = i + 3;
+            let mut ipc_region = mpu::Region::empty();
 
-            if region.get().0.is_null() {
-                let ipc_region = mpu::Region::empty();
-                regions[index] = ipc_region;
-            } else {
-                let ipc_region = mpu::Region::new(
+            if !region.get().0.is_null() {
+                ipc_region = mpu::Region::new(
                     region.get().0 as usize,
                     region.get().1.as_num::<u32>() as usize,
                     mpu::Permission::Full,
                     mpu::Permission::Full,
                     mpu::Permission::Full,
                 );
-
-                regions[index] = ipc_region; 
             }
+                
+            regions[i + 3] = ipc_region; 
         }
 
         // Allocate MPU regions
