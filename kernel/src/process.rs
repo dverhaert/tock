@@ -486,7 +486,7 @@ impl Process<'a> {
         // TODO: don't hardcode; define mpu function to return
         let mut regions = [mpu::Region::empty(); 8];
 
-        // Flash segment: priority 0 
+        // Flash region: priority 0 
         let flash_region = mpu::Region::new(
             self.flash.as_ptr() as usize,
             self.flash.len(),
@@ -497,7 +497,7 @@ impl Process<'a> {
 
         regions[0] = flash_region;
 
-        // RAM segment: priority 1 
+        // Memory region: priority 1 
         let memory_region = mpu::Region::new(
             self.memory.as_ptr() as usize,
             self.memory.len(),
@@ -508,7 +508,6 @@ impl Process<'a> {
 
         regions[1] = memory_region; 
 
-        // Grant region: priority 2 
         let grant_len = unsafe {
             math::PowerOfTwo::ceiling(
                 self.memory.as_ptr().offset(self.memory.len() as isize) as u32
@@ -523,6 +522,7 @@ impl Process<'a> {
                 .offset(-(grant_len as isize))
         };
         
+        // Grant region: priority 2 
         let grant_region = mpu::Region::new( 
             grant_base as usize,
             grant_len as usize,
@@ -533,7 +533,7 @@ impl Process<'a> {
 
         regions[2] = grant_region;
 
-        // IPC MPU regions: priorities 3 and higher
+        // IPC regions: priorities 3-7
         for (i, region) in self.mpu_regions.iter().enumerate() {
             let index = i + 3;
 
@@ -553,9 +553,9 @@ impl Process<'a> {
             }
         }
 
-        // Set MPU regions
-        if let Err(index) = mpu.set_regions(&regions) {
-            panic!("Unable to allocate MPU region with priority {}.", index);
+        // Allocate MPU regions
+        if let Err(index) = mpu.allocate_regions(&regions) {
+            panic!("Unable to allocate MPU region at index {}.", index);
         }
     }
 

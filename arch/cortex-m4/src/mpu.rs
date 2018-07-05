@@ -271,7 +271,7 @@ impl kernel::mpu::MPU for MPU {
         regs.control.set(0b0);
     }
 
-    fn set_regions(&self, regions: &[Region]) -> Result<(), usize> {
+    fn allocate_regions(&self, regions: &[Region]) -> Result<(), usize> {
         for (index, region) in regions.iter().enumerate() {
             if let ReturnCode::FAIL = self.write_registers(region, index) {
                 return Err(index);

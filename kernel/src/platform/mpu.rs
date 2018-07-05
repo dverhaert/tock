@@ -78,6 +78,7 @@ pub trait MPU {
     /// Allocates memory protection regions.
     ///
     /// # Arguments
+    ///
     /// `regions`: array of regions to be allocated. The index of the array
     ///            encodes the priority of the region. In the event of an 
     ///            overlap between regions, the implementor must ensure 
@@ -85,9 +86,10 @@ pub trait MPU {
     ///            take precendence.
     ///
     /// # Return Value
-    /// If it is infeasible to allocate a memory region, the index of the
-    /// region is returned.
-    fn set_regions(&self, regions: &[Region]) -> Result<(), usize>;
+    ///
+    /// If it is infeasible to allocate a memory region, returns its index
+    /// wrapped in a Result.
+    fn allocate_regions(&self, regions: &[Region]) -> Result<(), usize>;
 }
 
 /// No-op implementation of MPU trait
@@ -96,7 +98,7 @@ impl MPU for () {
 
     fn disable_mpu(&self) {}
 
-    fn set_regions(&self, _: &[Region]) -> Result<(), usize> {
+    fn allocate_regions(&self, _: &[Region]) -> Result<(), usize> {
         Ok(())
     }
 }
