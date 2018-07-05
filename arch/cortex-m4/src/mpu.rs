@@ -271,12 +271,10 @@ impl kernel::mpu::MPU for MPU {
         regs.control.set(0b0);
     }
 
-    fn set_regions(&self, regions: &[Option<Region>]) -> Result<(), &'static str> {
-        for (i, entry) in regions.iter().enumerate() {
-            if let Some(region) = entry {
-                if let ReturnCode::FAIL = self.write_registers(region, i) {
-                    return Err("TODO");
-                }
+    fn set_regions(&self, regions: &[Region]) -> Result<(), usize> {
+        for (index, region) in regions.iter().enumerate() {
+            if let ReturnCode::FAIL = self.write_registers(region, index) {
+                return Err(index);
             }
         }
 
@@ -311,15 +309,3 @@ fn parse_access(region: &kernel::mpu::Region) -> Option<usize> {
             },
     }
 }
-
-
-
-/*
-fn set_mpu(&self, region: Region) {
-    
-
-    regs.region_base_address.set(region.base_address());
-
-    regs.region_attributes_and_size.set(region.attributes());
-}
-*/

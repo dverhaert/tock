@@ -484,7 +484,7 @@ impl Process<'a> {
 
     pub fn setup_mpu<MPU: mpu::MPU>(&self, mpu: &MPU) {
         // TODO: don't hardcode; define mpu function to return
-        let mut regions = [None; 8];
+        let mut regions = [mpu::Region::empty(); 8];
 
         // Flash segment: priority 0 
         let flash_region = mpu::Region::new(
@@ -495,7 +495,7 @@ impl Process<'a> {
             mpu::Permission::Full,
         );
 
-        regions[0] = Some(flash_region);
+        regions[0] = flash_region;
 
         // RAM segment: priority 1 
         let memory_region = mpu::Region::new(
@@ -506,7 +506,7 @@ impl Process<'a> {
             mpu::Permission::Full
         );
 
-        regions[1] = Some(memory_region); 
+        regions[1] = memory_region; 
 
         // Grant region: priority 2 
         let grant_len = unsafe {
@@ -531,32 +531,31 @@ impl Process<'a> {
             mpu::Permission::PrivilegedOnly,
         );
 
-        regions[2] = Some(grant_region);
+        regions[2] = grant_region;
 
         // IPC MPU regions: priorities 3 and higher
         for (i, region) in self.mpu_regions.iter().enumerate() {
-            let priority = i + 3;
+            let index = i + 3;
 
             if region.get().0.is_null() {
                 let ipc_region = mpu::Region::empty();
-                regions[priority] = Some(ipc_region);
-                continue;
-            }
-            
-            let ipc_region = mpu::Region::new(
-                region.get().0 as usize,
-                region.get().1.as_num::<u32>() as usize,
-                mpu::Permission::Full,
-                mpu::Permission::Full,
-                mpu::Permission::Full,
-            );
+                regions[index] = ipc_region;
+            } else {
+                let ipc_region = mpu::Region::new(
+                    region.get().0 as usize,
+                    region.get().1.as_num::<u32>() as usize,
+                    mpu::Permission::Full,
+                    mpu::Permission::Full,
+                    mpu::Permission::Full,
+                );
 
-            regions[priority] = Some(ipc_region); 
+                regions[index] = ipc_region; 
+            }
         }
 
         // Set MPU regions
-        if let Err(s) = mpu.set_regions(&regions) {
-            panic!(s); 
+        if let Err(index) = mpu.set_regions(&regions) {
+            panic!("Unable to allocate MPU region with priority {}.", index);
         }
     }
 
