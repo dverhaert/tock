@@ -4,11 +4,11 @@
 pub enum Permission {
     //                  Privileged  Unprivileged
     //                  Access      Access
-    NoAccess,        // --          --
-    PrivilegedOnly,  // V           --
-    Full,            // V           V
+    NoAccess,       // --          --
+    PrivilegedOnly, // V           --
+    Full,           // V           V
 }
-    
+
 #[derive(Copy, Clone)]
 pub struct Region {
     start: usize,
@@ -24,7 +24,7 @@ impl Region {
         len: usize,
         read: Permission,
         write: Permission,
-        execute: Permission
+        execute: Permission,
     ) -> Region {
         Region {
             start: start,
@@ -60,7 +60,7 @@ impl Region {
     pub fn get_write_permission(&self) -> Permission {
         self.write
     }
-    
+
     pub fn get_execute_permission(&self) -> Permission {
         self.execute
     }
@@ -74,15 +74,15 @@ pub trait MPU {
     fn disable_mpu(&self);
 
     // Returns the number of supported MPU regions.
-    fn num_supported_regions (&self) -> u32;
+    fn num_supported_regions(&self) -> u32;
 
     /// Allocates memory protection regions.
     ///
     /// # Arguments
     ///
     /// `regions`: array of regions to be allocated. The index of the array
-    ///            encodes the priority of the region. In the event of an 
-    ///            overlap between regions, the implementor must ensure 
+    ///            encodes the priority of the region. In the event of an
+    ///            overlap between regions, the implementor must ensure
     ///            that the permissions of the region with higher priority
     ///            take precendence.
     ///
@@ -99,7 +99,9 @@ impl MPU for () {
 
     fn disable_mpu(&self) {}
 
-    fn num_supported_regions(&self) -> u32 { 8 }
+    fn num_supported_regions(&self) -> u32 {
+        8
+    }
 
     fn allocate_regions(&self, _: &[Region]) -> Result<(), usize> {
         Ok(())

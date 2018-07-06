@@ -487,10 +487,10 @@ impl Process<'a> {
         if num_regions != 8 {
             panic!("Currently Tock assumes 8 regions");
         }
-        
+
         let mut regions = [mpu::Region::empty(); 8];
 
-        // Flash region: priority 0 
+        // Flash region: priority 0
         let flash_region = mpu::Region::new(
             self.flash.as_ptr() as usize,
             self.flash.len(),
@@ -501,16 +501,16 @@ impl Process<'a> {
 
         regions[0] = flash_region;
 
-        // Memory region: priority 1 
+        // Memory region: priority 1
         let memory_region = mpu::Region::new(
             self.memory.as_ptr() as usize,
             self.memory.len(),
             mpu::Permission::Full,
             mpu::Permission::Full,
-            mpu::Permission::Full
+            mpu::Permission::Full,
         );
 
-        regions[1] = memory_region; 
+        regions[1] = memory_region;
 
         let grant_len = unsafe {
             math::PowerOfTwo::ceiling(
@@ -525,9 +525,9 @@ impl Process<'a> {
                 .offset(self.memory.len() as isize)
                 .offset(-(grant_len as isize))
         };
-        
-        // Grant region: priority 2 
-        let grant_region = mpu::Region::new( 
+
+        // Grant region: priority 2
+        let grant_region = mpu::Region::new(
             grant_base as usize,
             grant_len as usize,
             mpu::Permission::PrivilegedOnly,
@@ -550,8 +550,8 @@ impl Process<'a> {
                     mpu::Permission::Full,
                 );
             }
-                
-            regions[i + 3] = ipc_region; 
+
+            regions[i + 3] = ipc_region;
         }
 
         // Allocate MPU regions
@@ -559,7 +559,6 @@ impl Process<'a> {
             panic!("Unable to allocate MPU region at index {}.", index);
         }
     }
-
 
     pub fn add_mpu_region(&self, base: *const u8, size: u32) -> bool {
         if size >= 16 && size.count_ones() == 1 && (base as u32) % size == 0 {
