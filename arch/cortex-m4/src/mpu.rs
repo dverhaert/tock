@@ -124,7 +124,9 @@ impl MPU {
         
         // Empty region
         if len == 0 {
-            regs.rbar.set((region_num as u32) | 1 << 4);
+            let region_value = (region_num & 0xf) as u32;
+            regs.rbar.write(RegionBaseAddress::VALID::UseRBAR + 
+                            RegionBaseAddress::REGION.val(region_value));
             regs.rasr.set(0);
             return ReturnCode::SUCCESS;
         }
@@ -228,10 +230,12 @@ impl MPU {
             let max_subregion = min_subregion + len / subregion_size - 1;
 
             let region_len = PowerOfTwo::floor(region_size as u32);
-            if region_len.exp::<u32>() < 7 {
+            // exponent = log2(region_len)
+            let exponent = region_len.exp::<u32>();
+            if exponent < 7 {
                 // Subregions only supported for regions sizes 128 bytes and up.
                 return ReturnCode::FAIL;
-            } else if region_len.exp::<u32>() > 32 {
+            } else if exponent > 32 {
                 // Region sizes must be 4GB or smaller
                 return ReturnCode::FAIL;
             }
@@ -245,16 +249,24 @@ impl MPU {
             let subregion_mask =
                 (min_subregion..(max_subregion + 1)).fold(!0, |res, i| res & !(1 << i)) & 0xff;
 
-            let xn = execute as u32;
+
+
+            let address_value = (region_start >> 5) as u32;
+            let region_value = (region_num & 0xf) as u32;
+
+            regs.rbar.write(RegionBaseAddress::ADDR.val(address_value) + 
+                            RegionBaseAddress::VALID::UseRBAR + 
+                            RegionBaseAddress::REGION.val(region_value));
+
+            let region_len_value = exponent - 1;     
             let ap = access as u32;
-            regs.rbar.set((region_start | 1 << 4 | (region_num & 0xf)) as u32);
-            regs.rasr.set(
-                1
-                    | subregion_mask << 8
-                    | (region_len.exp::<u32>() - 1) << 1
-                    | ap << 24
-                    | xn << 28,
-            );
+            let xn = execute as u32;
+
+            regs.rasr.write(RegionAttributeAndSize::ENABLE::SET + 
+                            RegionAttributeAndSize::SRD.val(subregion_mask) +
+                            RegionAttributeAndSize::SIZE.val(region_len_value) + 
+                            RegionAttributeAndSize::AP.val(ap) + 
+                            RegionAttributeAndSize::XN.val(xn));       
         }
         ReturnCode::SUCCESS
     }
