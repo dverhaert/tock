@@ -64,9 +64,9 @@ register_bitfields![u32,
         /// MPU Region Number valid bit.
         VALID OFFSET(4) NUMBITS(1) [
             /// Use the base address specified in Region Number Register (RNR)
-            RegionNumberRegister = 0,
+            UseRNR = 0,
             /// Use the value of the REGION field in this register (RBAR)
-            Region = 1
+            UseRBAR = 1
         ],
         /// Specifies which MPU region to set if VALID is set to 1.
         REGION OFFSET(0) NUMBITS(4) []
@@ -152,18 +152,31 @@ impl MPU {
         if start % len == 0 {
             // Memory base aligned to memory size - straight forward case
             let region_len = PowerOfTwo::floor(len as u32);
-            if region_len.exp::<u32>() < 5 {
+            // exponent = log2(region_len)
+            let exponent = region_len.exp::<u32>();
+            if exponent < 5 {
                 // Region sizes must be 32 Bytes or larger
                 return ReturnCode::FAIL;
-            } else if region_len.exp::<u32>() > 32 {
+            } else if exponent > 32 {
                 // Region sizes must be 4GB or smaller
                 return ReturnCode::FAIL;
             }
+       
+            let address_value = (start >> 5) as u32;
+            let region_value = (region_num & 0xf) as u32;
 
-            let xn = execute as u32;
+            regs.rbar.write(RegionBaseAddress::ADDR.val(address_value) + 
+                            RegionBaseAddress::VALID::UseRBAR + 
+                            RegionBaseAddress::REGION.val(region_value));
+
+            let region_len_value = exponent - 1;     
             let ap = access as u32;
-            regs.rbar.set((start | 1 << 4 | (region_num & 0xf)) as u32);
-            regs.rasr.set(1 | (region_len.exp::<u32>() - 1) << 1 | ap << 24 | xn << 28);            
+            let xn = execute as u32;
+
+            regs.rasr.write(RegionAttributeAndSize::ENABLE::SET + 
+                            RegionAttributeAndSize::SIZE.val(region_len_value) + 
+                            RegionAttributeAndSize::AP.val(ap) + 
+                            RegionAttributeAndSize::XN.val(xn));            
         } else {
             // Memory base not aligned to memory size
 
@@ -285,10 +298,8 @@ impl kernel::mpu::MPU for MPU {
         // privileged code access to all unprotected memory.
         regs.control.set(0b101);
 
-        //let mpu_type = regs.mpu_type.get();
-        // mpu_type.data_regions.get();
-        let regions = regs.mpu_type.read(Type::DREGION);
-        debug!("This chip has {} regions", regions);       
+        //let regions = regs.mpu_type.read(Type::DREGION);
+        //debug!("This chip has {} regions", regions);       
     }
 
     fn disable_mpu(&self) {
