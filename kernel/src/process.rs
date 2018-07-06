@@ -483,6 +483,11 @@ impl Process<'a> {
     }
 
     pub fn setup_mpu<MPU: mpu::MPU>(&self, mpu: &MPU) {
+        let num_regions = mpu.num_supported_regions();
+        if num_regions != 8 {
+            panic!("Currently Tock assumes 8 regions");
+        }
+        
         let mut regions = [mpu::Region::empty(); 8];
 
         // Flash region: priority 0 

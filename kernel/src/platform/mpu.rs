@@ -99,7 +99,7 @@ impl MPU for () {
 
     fn disable_mpu(&self) {}
 
-    fn num_supported_regions(&self) -> u32 { 0 }
+    fn num_supported_regions(&self) -> u32 { 8 }
 
     fn allocate_regions(&self, _: &[Region]) -> Result<(), usize> {
         Ok(())
