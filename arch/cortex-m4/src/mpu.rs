@@ -17,7 +17,7 @@ pub struct MpuRegisters {
     pub ctrl: ReadWrite<u32, Control:: Register>,
     pub rnr: ReadWrite<u32, RegionNumber::Register>,
     pub rbar: ReadWrite<u32, RegionBaseAddress::Register>,
-    pub rasr: ReadWrite<u32, RegionAttributeAndSize::Register>,
+    pub rasr: ReadWrite<u32, RegionAttributes::Register>,
 }
 
 register_bitfields![u32,
@@ -73,7 +73,7 @@ register_bitfields![u32,
         REGION OFFSET(0) NUMBITS(4) []
     ],
 
-    RegionAttributeAndSize [
+    RegionAttributes [
         /// Enables instruction fetches/execute permission
         XN OFFSET(28) NUMBITS(1) [
             Enable = 0,
@@ -137,25 +137,25 @@ impl MPU {
         }
 
         let execute_value = match execute {
-            Permission::NoAccess => RegionAttributeAndSize::XN::Disable,
-            Permission::Full => RegionAttributeAndSize::XN::Enable, 
+            Permission::NoAccess => RegionAttributes::XN::Disable,
+            Permission::Full => RegionAttributes::XN::Enable, 
             _ => { return ReturnCode::FAIL; }, // Not supported
         };
 
         let access_value = match read {
-            Permission::NoAccess => RegionAttributeAndSize::AP::NoAccess,
+            Permission::NoAccess => RegionAttributes::AP::NoAccess,
             Permission::PrivilegedOnly => {
                 match write {
-                    Permission::NoAccess => RegionAttributeAndSize::AP::PrivilegedOnlyReadOnly,
-                    Permission::PrivilegedOnly => RegionAttributeAndSize::AP::PrivilegedOnly,
+                    Permission::NoAccess => RegionAttributes::AP::PrivilegedOnlyReadOnly,
+                    Permission::PrivilegedOnly => RegionAttributes::AP::PrivilegedOnly,
                     _ => { return ReturnCode::FAIL; }, // Not supported
                 }
             },
             Permission::Full => {
                 match write {
-                    Permission::NoAccess => RegionAttributeAndSize::AP::ReadOnly,
-                    Permission::PrivilegedOnly => RegionAttributeAndSize::AP::UnprivilegedReadOnly,
-                    Permission::Full => RegionAttributeAndSize::AP::ReadWrite,
+                    Permission::NoAccess => RegionAttributes::AP::ReadOnly,
+                    Permission::PrivilegedOnly => RegionAttributes::AP::UnprivilegedReadOnly,
+                    Permission::Full => RegionAttributes::AP::ReadWrite,
                 }
             },
         };
@@ -192,8 +192,8 @@ impl MPU {
                             RegionBaseAddress::VALID::UseRBAR + 
                             RegionBaseAddress::REGION.val(region_value));
 
-            regs.rasr.write(RegionAttributeAndSize::ENABLE::SET + 
-                            RegionAttributeAndSize::SIZE.val(region_len_value) + 
+            regs.rasr.write(RegionAttributes::ENABLE::SET + 
+                            RegionAttributes::SIZE.val(region_len_value) + 
                             access_value +
                             execute_value);
         } else {
@@ -273,9 +273,9 @@ impl MPU {
                             RegionBaseAddress::VALID::UseRBAR + 
                             RegionBaseAddress::REGION.val(region_value));
 
-            regs.rasr.write(RegionAttributeAndSize::ENABLE::SET + 
-                            RegionAttributeAndSize::SRD.val(subregion_mask) +
-                            RegionAttributeAndSize::SIZE.val(region_len_value) + 
+            regs.rasr.write(RegionAttributes::ENABLE::SET + 
+                            RegionAttributes::SRD.val(subregion_mask) +
+                            RegionAttributes::SIZE.val(region_len_value) + 
                             access_value +
                             execute_value);
         }
@@ -287,19 +287,21 @@ impl kernel::mpu::MPU for MPU {
     fn enable_mpu(&self) {
         let regs = &*self.0;
 
-        // Enable the MPU, disable it during HardFault/NMI handlers, allow
+        // Enable the MPU, disable it during HardFault/NMI handlers, and allow
         // privileged code access to all unprotected memory.
-        regs.ctrl.write(Control::ENABLE::SET);
-        regs.ctrl.write(Control::HFNMIENA::CLEAR);
-        regs.ctrl.write(Control::PRIVDEFENA::SET);
-
-        //let regions = regs.mpu_type.read(Type::DREGION);
-        //debug!("This chip has {} regions", regions);       
+        regs.ctrl.write(Control::ENABLE::SET + 
+                        Control::HFNMIENA::CLEAR + 
+                        Control::PRIVDEFENA::SET);
     }
 
     fn disable_mpu(&self) {
         let regs = &*self.0;
         regs.ctrl.write(Control::ENABLE::CLEAR);
+    }
+
+    fn num_supported_regions (&self) -> u32 {
+        let regs = &*self.0;
+        regs.mpu_type.read(Type::DREGION)
     }
 
     fn allocate_regions(&self, regions: &[Region]) -> Result<(), usize> {

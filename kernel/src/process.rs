@@ -483,7 +483,6 @@ impl Process<'a> {
     }
 
     pub fn setup_mpu<MPU: mpu::MPU>(&self, mpu: &MPU) {
-        // TODO: don't hardcode; define mpu function to return
         let mut regions = [mpu::Region::empty(); 8];
 
         // Flash region: priority 0 

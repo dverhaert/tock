@@ -73,6 +73,9 @@ pub trait MPU {
     /// Disables the MPU.
     fn disable_mpu(&self);
 
+    // Returns the number of supported MPU regions.
+    fn num_supported_regions (&self) -> u32;
+
     /// Allocates memory protection regions.
     ///
     /// # Arguments
@@ -95,6 +98,8 @@ impl MPU for () {
     fn enable_mpu(&self) {}
 
     fn disable_mpu(&self) {}
+
+    fn num_supported_regions(&self) -> u32 { 0 }
 
     fn allocate_regions(&self, _: &[Region]) -> Result<(), usize> {
         Ok(())
