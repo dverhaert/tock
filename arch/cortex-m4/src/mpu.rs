@@ -289,9 +289,9 @@ impl kernel::mpu::MPU for MPU {
 
         // Enable the MPU, disable it during HardFault/NMI handlers, allow
         // privileged code access to all unprotected memory.
-        regs.ctrl.write(Control::ENABLE::SET);
-        regs.ctrl.write(Control::HFNMIENA::CLEAR);
-        regs.ctrl.write(Control::PRIVDEFENA::SET);
+        regs.ctrl.write(Control::ENABLE::SET + 
+                        Control::HFNMIENA::CLEAR + 
+                        Control::PRIVDEFENA::SET);
 
         //let regions = regs.mpu_type.read(Type::DREGION);
         //debug!("This chip has {} regions", regions);       
