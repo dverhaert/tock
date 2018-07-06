@@ -111,9 +111,9 @@ impl MPU {
         MPU(MPU_BASE_ADDRESS)
     }
 
-    fn write_registers(&self, region: &kernel::mpu::Region, region_num: usize) -> ReturnCode {
+    fn allocate_region(&self, region: &kernel::mpu::Region, region_num: usize) -> ReturnCode {
         let regs = &*self.0;
-
+        
         if region_num >= 8 {
             // There are only 8 (0-indexed) regions available
             return ReturnCode::FAIL;
@@ -121,24 +121,42 @@ impl MPU {
 
         let start = region.get_start();
         let len = region.get_len();
+        let read = region.get_read_permission();
+        let write = region.get_write_permission();
+        let execute = region.get_execute_permission();
+        
+        let region_value = (region_num & 0xf) as u32;
         
         // Empty region
         if len == 0 {
-            let region_value = (region_num & 0xf) as u32;
             regs.rbar.write(RegionBaseAddress::VALID::UseRBAR + 
                             RegionBaseAddress::REGION.val(region_value));
             regs.rasr.set(0);
             return ReturnCode::SUCCESS;
         }
 
-        let execute = match MPU::parse_execute(region) {
-            Some(execute) => execute,
-            None => return ReturnCode::FAIL,
+        let execute_value = match execute {
+            kernel::mpu::Permission::NoAccess => RegionAttributeAndSize::XN::Disable,
+            kernel::mpu::Permission::Full => RegionAttributeAndSize::XN::Enable, 
+            _ => { return ReturnCode::FAIL; }, // Not supported
         };
 
-        let access = match MPU::parse_access(region) {
-            Some(access) => access,
-            None => return ReturnCode::FAIL,
+        let access_value = match read {
+            kernel::mpu::Permission::NoAccess => RegionAttributeAndSize::AP::NoAccess,
+            kernel::mpu::Permission::PrivilegedOnly => {
+                match write {
+                    kernel::mpu::Permission::NoAccess => RegionAttributeAndSize::AP::PrivilegedOnlyReadOnly,
+                    kernel::mpu::Permission::PrivilegedOnly => RegionAttributeAndSize::AP::PrivilegedOnly,
+                    _ => { return ReturnCode::FAIL; }, // Not supported
+                }
+            },
+            kernel::mpu::Permission::Full => {
+                match write {
+                    kernel::mpu::Permission::NoAccess => RegionAttributeAndSize::AP::ReadOnly,
+                    kernel::mpu::Permission::PrivilegedOnly => RegionAttributeAndSize::AP::UnprivilegedReadOnly,
+                    kernel::mpu::Permission::Full => RegionAttributeAndSize::AP::ReadWrite,
+                }
+            },
         };
 
         // There are two possibilities we support:
@@ -154,8 +172,10 @@ impl MPU {
         if start % len == 0 {
             // Memory base aligned to memory size - straight forward case
             let region_len = PowerOfTwo::floor(len as u32);
+
             // exponent = log2(region_len)
             let exponent = region_len.exp::<u32>();
+
             if exponent < 5 {
                 // Region sizes must be 32 Bytes or larger
                 return ReturnCode::FAIL;
@@ -165,20 +185,17 @@ impl MPU {
             }
        
             let address_value = (start >> 5) as u32;
-            let region_value = (region_num & 0xf) as u32;
+            let region_len_value = exponent - 1;     
 
             regs.rbar.write(RegionBaseAddress::ADDR.val(address_value) + 
                             RegionBaseAddress::VALID::UseRBAR + 
                             RegionBaseAddress::REGION.val(region_value));
 
-            let region_len_value = exponent - 1;     
-            let ap = access as u32;
-            let xn = execute as u32;
 
             regs.rasr.write(RegionAttributeAndSize::ENABLE::SET + 
                             RegionAttributeAndSize::SIZE.val(region_len_value) + 
-                            RegionAttributeAndSize::AP.val(ap) + 
-                            RegionAttributeAndSize::XN.val(xn));            
+                            access_value +
+                            execute_value);
         } else {
             // Memory base not aligned to memory size
 
@@ -249,54 +266,20 @@ impl MPU {
             let subregion_mask =
                 (min_subregion..(max_subregion + 1)).fold(!0, |res, i| res & !(1 << i)) & 0xff;
 
-
-
             let address_value = (region_start >> 5) as u32;
-            let region_value = (region_num & 0xf) as u32;
+            let region_len_value = exponent - 1;     
 
             regs.rbar.write(RegionBaseAddress::ADDR.val(address_value) + 
                             RegionBaseAddress::VALID::UseRBAR + 
                             RegionBaseAddress::REGION.val(region_value));
 
-            let region_len_value = exponent - 1;     
-            let ap = access as u32;
-            let xn = execute as u32;
-
             regs.rasr.write(RegionAttributeAndSize::ENABLE::SET + 
                             RegionAttributeAndSize::SRD.val(subregion_mask) +
                             RegionAttributeAndSize::SIZE.val(region_len_value) + 
-                            RegionAttributeAndSize::AP.val(ap) + 
-                            RegionAttributeAndSize::XN.val(xn));       
+                            access_value +
+                            execute_value);
         }
         ReturnCode::SUCCESS
-    }
-
-    // Parse execute permission into bitmask
-    fn parse_execute(region: &kernel::mpu::Region) -> Option<usize> {
-        match region.get_execute_permission() {
-            kernel::mpu::Permission::NoAccess => Some(0b1),
-            kernel::mpu::Permission::Full => Some(0b0),
-            _ => None,
-        }
-    }
-
-    // Parse access permission into a bitmask
-    fn parse_access(region: &kernel::mpu::Region) -> Option<usize> {
-        match region.get_read_permission() {
-            kernel::mpu::Permission::NoAccess => Some(0b000),
-            kernel::mpu::Permission::PrivilegedOnly => 
-                match region.get_write_permission() {
-                    kernel::mpu::Permission::NoAccess => Some(0b101),
-                    kernel::mpu::Permission::PrivilegedOnly => Some(0b001),
-                    _ => None,
-                },
-            kernel::mpu::Permission::Full =>
-                match region.get_write_permission() {
-                    kernel::mpu::Permission::NoAccess => Some(0b110),
-                    kernel::mpu::Permission::PrivilegedOnly => Some(0b010),
-                    kernel::mpu::Permission::Full => Some(0b011),
-                },
-        }
     }
 }
 
@@ -321,7 +304,7 @@ impl kernel::mpu::MPU for MPU {
 
     fn allocate_regions(&self, regions: &[Region]) -> Result<(), usize> {
         for (index, region) in regions.iter().enumerate() {
-            if let ReturnCode::FAIL = self.write_registers(region, index) {
+            if let ReturnCode::FAIL = self.allocate_region(region, index) {
                 return Err(index);
             }
         }
