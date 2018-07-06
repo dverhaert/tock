@@ -1,10 +1,9 @@
 //! Implementation of the ARM memory protection unit.
 
 use kernel;
-use kernel::common::cells::VolatileCell;
 use kernel::common::math::PowerOfTwo;
 use kernel::common::StaticRef;
-use kernel::common::regs::{ReadWrite};
+use kernel::common::regs::{ReadWrite, ReadOnly};
 use kernel::ReturnCode;
 
 #[repr(C)]
@@ -13,11 +12,11 @@ use kernel::ReturnCode;
 /// Described in section 4.5 of
 /// <http://infocenter.arm.com/help/topic/com.arm.doc.dui0553a/DUI0553A_cortex_m4_dgug.pdf>
 pub struct MpuRegisters {
-    pub mpu_type: ReadOnly<u32>,
-    pub control: ReadWrite<u32>,
-    pub rnr: ReadWrite<u32>,
-    pub rbar: ReadWrite<u32>,
-    pub rasr: ReadWrite<u32>,
+    pub mpu_type: ReadOnly<u32, Type::Register>,
+    pub control: ReadWrite<u32, Control:: Register>,
+    pub rnr: ReadWrite<u32, RegionNumber::Register>,
+    pub rbar: ReadWrite<u32, RegionBaseAddress::Register>,
+    pub rasr: ReadWrite<u32, RegionAttributeAndSize::Register>,
 }
 
 register_bitfields![u32,
@@ -125,8 +124,8 @@ impl MPU {
         
         // Empty region
         if len == 0 {
-            regs.region_base_address.set((region_num as u32) | 1 << 4);
-            regs.region_attributes_and_size.set(0);
+            regs.rbar.set((region_num as u32) | 1 << 4);
+            regs.rasr.set(0);
             return ReturnCode::SUCCESS;
         }
 
@@ -163,8 +162,8 @@ impl MPU {
 
             let xn = execute as u32;
             let ap = access as u32;
-            regs.region_base_address.set((start | 1 << 4 | (region_num & 0xf)) as u32);
-            regs.region_attributes_and_size.set(1 | (region_len.exp::<u32>() - 1) << 1 | ap << 24 | xn << 28);            
+            regs.rbar.set((start | 1 << 4 | (region_num & 0xf)) as u32);
+            regs.rasr.set(1 | (region_len.exp::<u32>() - 1) << 1 | ap << 24 | xn << 28);            
         } else {
             // Memory base not aligned to memory size
 
@@ -235,8 +234,8 @@ impl MPU {
 
             let xn = execute as u32;
             let ap = access as u32;
-            regs.region_base_address.set((region_start | 1 << 4 | (region_num & 0xf)) as u32);
-            regs.region_attributes_and_size.set(
+            regs.rbar.set((region_start | 1 << 4 | (region_num & 0xf)) as u32);
+            regs.rasr.set(
                 1
                     | subregion_mask << 8
                     | (region_len.exp::<u32>() - 1) << 1
@@ -286,14 +285,10 @@ impl kernel::mpu::MPU for MPU {
         // privileged code access to all unprotected memory.
         regs.control.set(0b101);
 
-        let mpu_type = regs.mpu_type.get();
-        let regions = mpu_type.data_regions.get();
-        if regions != 8 {
-            panic!(
-                "Tock currently assumes 8 MPU regions. This chip has {}",
-                regions
-            );
-        }
+        //let mpu_type = regs.mpu_type.get();
+        // mpu_type.data_regions.get();
+        let regions = regs.mpu_type.read(Type::DREGION);
+        debug!("This chip has {} regions", regions);       
     }
 
     fn disable_mpu(&self) {

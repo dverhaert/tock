@@ -550,13 +550,10 @@ impl Process<'a> {
             regions[i + 3] = ipc_region; 
         }
 
-        debug!("Before allocate");
         // Allocate MPU regions
         if let Err(index) = mpu.allocate_regions(&regions) {
-            debug!("HUH!?");
             panic!("Unable to allocate MPU region at index {}.", index);
         }
-        debug!("After allocate");
     }
 
 
