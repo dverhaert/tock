@@ -7,144 +7,79 @@ use kernel::common::StaticRef;
 use kernel::common::regs::{ReadWrite};
 use kernel::ReturnCode;
 
-/// Indicates whether the MPU is present and, if so, how many regions it
-/// supports.
-#[repr(C)]
-pub struct MpuType {
-    /// Indicates whether the processor support unified (0) or separate
-    /// (1) instruction and data regions. Always reads 0 on the
-    /// Cortex-M4.
-    pub is_separate: VolatileCell<u8>,
-
-    /// The number of data regions supported. If this field reads-as-zero the
-    /// processor does not implement an MPU
-    pub data_regions: VolatileCell<u8>,
-
-    /// The number of instructions regions supported. Always reads 0.
-    pub instruction_regions: VolatileCell<u8>,
-
-    _reserved: u8,
-}
-
 #[repr(C)]
 /// MPU Registers for the Cortex-M4 family
 ///
 /// Described in section 4.5 of
 /// <http://infocenter.arm.com/help/topic/com.arm.doc.dui0553a/DUI0553A_cortex_m4_dgug.pdf>
 pub struct MpuRegisters {
-    // TODO: Change the registers to ReadWrite/ReadOnly instead of VolatileCell
-    pub mpu_type: VolatileCell<MpuType>,
-
-    /// The control register:
-    ///
-    ///   * Enables the MPU (bit 0).
-    ///   * Enables MPU in hard-fault, non-maskable interrupt (NMI) and
-    ///     FAULTMASK escalated handlers (bit 1).
-    ///   * Enables the default memory map background region in privileged mode
-    ///     (bit 2).
-    ///
-    /// ```text
-    /// Bit   | Name       | Function
-    /// ----- | ---------- | -----------------------------
-    /// 0     | ENABLE     | Enable the MPU (1=enabled)
-    /// 1     | HFNMIENA   | 0=MPU disabled during HardFault, NMI, and FAULTMASK
-    ///       |            | regardless of bit 0. 1 leaves enabled.
-    /// 2     | PRIVDEFENA | 0=Any memory access not explicitly enabled causes fault
-    ///       |            | 1=Privledged mode code can read any memory address
-    /// ```
+    pub mpu_type: ReadOnly<u32>,
     pub control: ReadWrite<u32>,
-
-    /// Selects the region number (zero-indexed) referenced by the region base
-    /// address and region attribute and size registers.
-    ///
-    /// ```text
-    /// Bit   | Name     | Function
-    /// ----- | -------- | -----------------------------
-    /// [7:0] | REGION   | Region for writes to MPU_RBAR or MPU_RASR. Range 0-7.
-    /// ```
-    pub region_number: ReadWrite<u32>,
-
-    /// Defines the base address of the currently selected MPU region.
-    ///
-    /// When writing, the first 3 bits select a new region if bit-4 is set.
-    ///
-    /// The top bits set the base address of the register, with the bottom 32-N
-    /// bits masked based on the region size (set in the region attribute and
-    /// size register) according to:
-    ///
-    ///   N = Log2(Region size in bytes)
-    ///
-    /// ```text
-    /// Bit       | Name    | Function
-    /// --------- | ------- | -----------------------------
-    /// [31:N]    | ADDR    | Region base address
-    /// [(N-1):5] |         | Reserved
-    /// [4]       | VALID   | {RZ} 0=Use region_number reg, 1=Use REGION
-    ///           |         |      Update base address for chosen region
-    /// [3:0]     | REGION  | {W} (see VALID) ; {R} return region_number reg
-    /// ```
-    pub region_base_address: ReadWrite<u32>,
-
-    /// Defines the region size and memory attributes of the selected MPU
-    /// region. The bits are defined as in 4.5.5 of the Cortex-M4 user guide:
-    ///
-    /// ```text
-    /// Bit   | Name   | Function
-    /// ----- | ------ | -----------------------------
-    /// 0     | ENABLE | Region enable
-    /// 5:1   | SIZE   | Region size is 2^(SIZE+1) (minimum 3)
-    /// 7:6   |        | Unused
-    /// 15:8  | SRD    | Subregion disable bits (0 is enable, 1 is disable)
-    /// 16    | B      | Memory access attribute
-    /// 17    | C      | Memory access attribute
-    /// 18    | S      | Shareable
-    /// 21:19 | TEX    | Memory access attribute
-    /// 23:22 |        | Unused
-    /// 26:24 | AP     | Access permission field
-    /// 27    |        | Unused
-    /// 28    | XN     | Instruction access disable
-    /// ```
-    pub region_attributes_and_size: ReadWrite<u32>,
+    pub rnr: ReadWrite<u32>,
+    pub rbar: ReadWrite<u32>,
+    pub rasr: ReadWrite<u32>,
 }
 
 register_bitfields![u32,
     Type [
-        /// Number of supported MPU instruction regions
+        /// The number of MPU instructions regions supported. Always reads 0.
         IREGION OFFSET(16) NUMBITS(8) [],
-        /// Number of supported MPU data regions
+        /// The number of data regions supported. If this field reads-as-zero the
+        /// processor does not implement an MPU
         DREGION OFFSET(8) NUMBITS(8) [],
-        /// Support for unified or separate instruction
-        /// and data memory regions
+        /// Indicates whether the processor support unified (0) or separate
+        /// (1) instruction and data regions. Always reads 0 on the
+        /// Cortex-M4.
         SEPARATE OFFSET(0) NUMBITS(1) []
     ],
 
     Control [
         /// Enables privileged software access to the default
         /// memory map
-        PRIVDEFENA 2, 
+        PRIVDEFENA OFFSET(2) NUMBITS(1) [
+            Enable = 0,
+            Disable = 1 
+        ],
         /// Enables the operation of MPU during hard fault, NMI, 
         /// and FAULTMASK handlers
-        HFNMIENA 1,
+        HFNMIENA OFFSET(1) NUMBITS(1) [
+            Enable = 0,
+            Disable = 1 
+        ],
         /// Enables the MPU
-        ENABLE 0
+        ENABLE OFFSET(0) NUMBITS(1) [
+            Disable = 0,
+            Enable = 1
+        ]
     ],
-
+      
     RegionNumber [
-        /// MPU region
+        /// Region indicating the MPU region referenced by the MPU_RBAR and
+        /// MPU_RASR registers. Range 0-7 corresponding to the MPU regions.
         REGION OFFSET(0) NUMBITS(8) []
     ],
 
     RegionBaseAddress [
-        ADDR OFFSET(5) NUMBITS(27) []
-
-
+        /// Base address of the currently selected MPU region.
+        ADDR OFFSET(5) NUMBITS(27) [],
+        /// MPU Region Number valid bit.
+        VALID OFFSET(4) NUMBITS(1) [
+            /// Use the base address specified in Region Number Register (RNR)
+            RegionNumberRegister = 0,
+            /// Use the value of the REGION field in this register (RBAR)
+            Region = 1
+        ],
+        /// Specifies which MPU region to set if VALID is set to 1.
+        REGION OFFSET(0) NUMBITS(4) []
     ],
 
     RegionAttributeAndSize [
+        /// Enables instruction fetches/execute permission
         XN OFFSET(28) NUMBITS(1) [
             Enable = 0,
             Disable = 1 
         ],
+        /// Defines access permissions
         AP OFFSET(24) NUMBITS(3) [
             //                                 Privileged  Unprivileged
             //                                 Access      Access
@@ -155,17 +90,13 @@ register_bitfields![u32,
             Reserved = 0b100,               // undef       undef
             PrivilegedOnlyReadOnly = 0b101, // R-          --
             ReadOnly = 0b110,               // R-          R-
-            ReadOnlyAlias = 0b111          // R-          R-
+            ReadOnlyAlias = 0b111           // R-          R-
         ],
-        SRD8 OFFSET(15) NUMBITS(1) [],
-        SRD7 OFFSET(14) NUMBITS(1) [],
-        SRD6 OFFSET(13) NUMBITS(1) [],
-        SRD5 OFFSET(12) NUMBITS(1) [],
-        SRD4 OFFSET(11) NUMBITS(1) [],
-        SRD3 OFFSET(10) NUMBITS(1) [],
-        SRD2 OFFSET(9) NUMBITS(1) [],
-        SRD1 OFFSET(8) NUMBITS(1) [],
+        /// Subregion disable bits
+        SRD OFFSET(8) NUMBITS(8) [],
+        /// Specifies the region size, being 2^(SIZE+1) (minimum 3)
         SIZE OFFSET(1) NUMBITS(5) [],
+        /// Enables the region
         ENABLE OFFSET(0) NUMBITS(1) []
     ]
 ];
