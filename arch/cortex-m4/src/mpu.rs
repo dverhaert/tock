@@ -4,6 +4,7 @@ use kernel;
 use kernel::common::math::PowerOfTwo;
 use kernel::common::StaticRef;
 use kernel::common::regs::{ReadWrite, ReadOnly};
+use kernel::mpu::{Region, Permission};
 use kernel::ReturnCode;
 
 #[repr(C)]
@@ -13,7 +14,7 @@ use kernel::ReturnCode;
 /// <http://infocenter.arm.com/help/topic/com.arm.doc.dui0553a/DUI0553A_cortex_m4_dgug.pdf>
 pub struct MpuRegisters {
     pub mpu_type: ReadOnly<u32, Type::Register>,
-    pub control: ReadWrite<u32, Control:: Register>,
+    pub ctrl: ReadWrite<u32, Control:: Register>,
     pub rnr: ReadWrite<u32, RegionNumber::Register>,
     pub rbar: ReadWrite<u32, RegionBaseAddress::Register>,
     pub rasr: ReadWrite<u32, RegionAttributeAndSize::Register>,
@@ -111,7 +112,7 @@ impl MPU {
         MPU(MPU_BASE_ADDRESS)
     }
 
-    fn allocate_region(&self, region: &kernel::mpu::Region, region_num: usize) -> ReturnCode {
+    fn allocate_region(&self, region: &Region, region_num: usize) -> ReturnCode {
         let regs = &*self.0;
         
         if region_num >= 8 {
@@ -136,25 +137,25 @@ impl MPU {
         }
 
         let execute_value = match execute {
-            kernel::mpu::Permission::NoAccess => RegionAttributeAndSize::XN::Disable,
-            kernel::mpu::Permission::Full => RegionAttributeAndSize::XN::Enable, 
+            Permission::NoAccess => RegionAttributeAndSize::XN::Disable,
+            Permission::Full => RegionAttributeAndSize::XN::Enable, 
             _ => { return ReturnCode::FAIL; }, // Not supported
         };
 
         let access_value = match read {
-            kernel::mpu::Permission::NoAccess => RegionAttributeAndSize::AP::NoAccess,
-            kernel::mpu::Permission::PrivilegedOnly => {
+            Permission::NoAccess => RegionAttributeAndSize::AP::NoAccess,
+            Permission::PrivilegedOnly => {
                 match write {
-                    kernel::mpu::Permission::NoAccess => RegionAttributeAndSize::AP::PrivilegedOnlyReadOnly,
-                    kernel::mpu::Permission::PrivilegedOnly => RegionAttributeAndSize::AP::PrivilegedOnly,
+                    Permission::NoAccess => RegionAttributeAndSize::AP::PrivilegedOnlyReadOnly,
+                    Permission::PrivilegedOnly => RegionAttributeAndSize::AP::PrivilegedOnly,
                     _ => { return ReturnCode::FAIL; }, // Not supported
                 }
             },
-            kernel::mpu::Permission::Full => {
+            Permission::Full => {
                 match write {
-                    kernel::mpu::Permission::NoAccess => RegionAttributeAndSize::AP::ReadOnly,
-                    kernel::mpu::Permission::PrivilegedOnly => RegionAttributeAndSize::AP::UnprivilegedReadOnly,
-                    kernel::mpu::Permission::Full => RegionAttributeAndSize::AP::ReadWrite,
+                    Permission::NoAccess => RegionAttributeAndSize::AP::ReadOnly,
+                    Permission::PrivilegedOnly => RegionAttributeAndSize::AP::UnprivilegedReadOnly,
+                    Permission::Full => RegionAttributeAndSize::AP::ReadWrite,
                 }
             },
         };
@@ -190,7 +191,6 @@ impl MPU {
             regs.rbar.write(RegionBaseAddress::ADDR.val(address_value) + 
                             RegionBaseAddress::VALID::UseRBAR + 
                             RegionBaseAddress::REGION.val(region_value));
-
 
             regs.rasr.write(RegionAttributeAndSize::ENABLE::SET + 
                             RegionAttributeAndSize::SIZE.val(region_len_value) + 
@@ -283,15 +283,15 @@ impl MPU {
     }
 }
 
-type Region = kernel::mpu::Region;
-
 impl kernel::mpu::MPU for MPU {
     fn enable_mpu(&self) {
         let regs = &*self.0;
 
         // Enable the MPU, disable it during HardFault/NMI handlers, allow
         // privileged code access to all unprotected memory.
-        regs.control.set(0b101);
+        regs.ctrl.write(Control::ENABLE::SET);
+        regs.ctrl.write(Control::HFNMIENA::CLEAR);
+        regs.ctrl.write(Control::PRIVDEFENA::SET);
 
         //let regions = regs.mpu_type.read(Type::DREGION);
         //debug!("This chip has {} regions", regions);       
@@ -299,7 +299,7 @@ impl kernel::mpu::MPU for MPU {
 
     fn disable_mpu(&self) {
         let regs = &*self.0;
-        regs.control.set(0b0);
+        regs.ctrl.write(Control::ENABLE::CLEAR);
     }
 
     fn allocate_regions(&self, regions: &[Region]) -> Result<(), usize> {
