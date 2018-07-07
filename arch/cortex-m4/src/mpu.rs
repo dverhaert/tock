@@ -137,6 +137,7 @@ impl MPU {
             return ReturnCode::SUCCESS;
         }
 
+        // Convert execute permission to a bitfield
         let execute_value = match execute {
             Permission::NoAccess => RegionAttributes::XN::Disable,
             Permission::Full => RegionAttributes::XN::Enable,
@@ -145,6 +146,7 @@ impl MPU {
             } // Not supported
         };
 
+        // Convert read & write permissions to bitfields
         let access_value = match read {
             Permission::NoAccess => RegionAttributes::AP::NoAccess,
             Permission::PrivilegedOnly => {
@@ -173,6 +175,7 @@ impl MPU {
         //    subregions, as long as the memory region's base address is aligned
         //    to 1/8th of a larger region size.
 
+        // Possibility 1
         if start % len == 0 {
             // Memory base aligned to memory size - straight forward case
             let region_len = PowerOfTwo::floor(len as u32);
@@ -203,7 +206,9 @@ impl MPU {
                     + access_value
                     + execute_value,
             );
-        } else {
+        }
+        // Possibility 2
+        else {
             // Memory base not aligned to memory size
 
             // Which (power-of-two) subregion size would align with the base

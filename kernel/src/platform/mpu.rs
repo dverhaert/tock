@@ -2,8 +2,8 @@
 
 #[derive(Copy, Clone)]
 pub enum Permission {
-    //                  Privileged  Unprivileged
-    //                  Access      Access
+    //                 Privileged  Unprivileged
+    //                 Access      Access
     NoAccess,       // --          --
     PrivilegedOnly, // V           --
     Full,           // V           V
