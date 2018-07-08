@@ -73,7 +73,7 @@ pub trait MPU {
     /// Disables the MPU.
     fn disable_mpu(&self);
 
-    // Returns the number of supported MPU regions.
+    /// Returns the number of supported MPU regions.
     fn num_supported_regions(&self) -> u32;
 
     /// Allocates memory protection regions.
