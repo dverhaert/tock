@@ -74,21 +74,23 @@ impl<'a, A: hil::analog_comparator::AnalogComparator> Driver for AnalogComparato
     /// - `4`: Disable interrupt-based comparisons.
     ///        Input x chooses the desired comparator ACx (e.g. 0 or 1 for
     ///        hail, 0-3 for imix)
-    fn command(&self, command_num: usize, data: usize, _: usize, _: AppId) -> ReturnCode {
+    fn command(&self, command_num: usize, ac: usize, _: usize, _: AppId) -> ReturnCode {
         match command_num {
-            0 => return ReturnCode::SUCCESS,
+            0 => ReturnCode::SuccessWithValue {
+                value: self.ac.len() as usize,
+            },
 
             1 => ReturnCode::SuccessWithValue {
-                value: self.ac.comparison(data) as usize,
+                value: self.ac.comparison(ac) as usize,
             },
 
             2 => ReturnCode::SuccessWithValue {
-                value: self.ac.window_comparison(data) as usize,
+                value: self.ac.window_comparison(ac) as usize,
             },
 
-            3 => self.ac.enable_interrupts(data),
+            3 => self.ac.enable_interrupts(ac),
 
-            4 => self.ac.disable_interrupts(data),
+            4 => self.ac.disable_interrupts(ac),
 
             _ => return ReturnCode::ENOSUPPORT,
         }

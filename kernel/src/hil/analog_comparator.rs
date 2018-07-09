@@ -6,11 +6,17 @@
 use returncode::ReturnCode;
 
 pub trait AnalogComparator {
-    /// Do a single comparison of two inputs, depending on the AC chosen. Output
-    /// will be True (1) when one is higher than the other, and False (0)
+    /// The chip-dependent type of an Analog Comparator.
+    type Ac;
+
+    /// The chip-dependent type of a window.
+    type Window;
+    
+    /// Do a single comparison of two inputs, depending on the channel chosen. Output
+    /// will be True (1) when one AC is higher than the other, and False (0)
     /// otherwise.  Specifically, the output is True when Vp > Vn (Vin positive
     /// > Vin negative), and False if Vp < Vn.
-    fn comparison(&self, usize) -> bool;
+    fn comparison(&self, ac: &Self::Ac) -> bool;
 
     /// Do a comparison of three input voltages. Two analog comparators, ACx and
     /// ACx+1, are grouped for this comparison depending on the window chosen.
@@ -28,14 +34,14 @@ pub trait AnalogComparator {
     /// it lies outside of the window.  Specifically, the output will be True
     /// when Vn_x+1 < Vcommon < Vp_x, and False if Vcommon < Vn_x+1 or Vcommon >
     /// Vp_x.
-    fn window_comparison(&self, usize) -> bool;
+    fn window_comparison(&self, window: &Self::Window) -> bool;
 
     /// Enable interrupt-based comparison for the chosen AC (e.g. AC1). This
     /// will make it listen and send an interrupt as soon as Vp > Vn.
-    fn enable_interrupts(&self, usize) -> ReturnCode;
+    fn enable_interrupts(&self, ac: &Self::Ac) -> ReturnCode;
 
     /// Disable interrupt-based comparison for the chosen AC.
-    fn disable_interrupts(&self, usize) -> ReturnCode;
+    fn disable_interrupts(&self, ac: &Self::Ac) -> ReturnCode;
 }
 
 pub trait Client {
