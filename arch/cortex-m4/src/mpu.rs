@@ -5,7 +5,6 @@ use kernel::common::math::PowerOfTwo;
 use kernel::common::regs::{ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::mpu::{Permission, Region};
-use kernel::ReturnCode;
 
 #[repr(C)]
 /// MPU Registers for the Cortex-M4 family
@@ -112,16 +111,11 @@ impl MPU {
         MPU(MPU_BASE_ADDRESS)
     }
 
-    fn allocate_region(&self, region: &Region, region_num: usize) -> ReturnCode {
+    fn set_region(&self, region: &Region, region_num: usize) {
         let regs = &*self.0;
 
-        if region_num >= 8 {
-            // There are only 8 (0-indexed) regions available
-            return ReturnCode::FAIL;
-        }
-
         let start = region.get_start();
-        let len = region.get_len();
+        let len = region.get_end() - start;
         let read = region.get_read_permission();
         let write = region.get_write_permission();
         let execute = region.get_execute_permission();
@@ -134,7 +128,6 @@ impl MPU {
                 RegionBaseAddress::VALID::UseRBAR + RegionBaseAddress::REGION.val(region_value),
             );
             regs.rasr.set(0);
-            return ReturnCode::SUCCESS;
         }
 
         // Convert execute permission to a bitfield
@@ -142,7 +135,7 @@ impl MPU {
             Permission::NoAccess => RegionAttributes::XN::Disable,
             Permission::Full => RegionAttributes::XN::Enable,
             _ => {
-                return ReturnCode::FAIL;
+                panic!("");
             } // Not supported
         };
 
@@ -154,7 +147,7 @@ impl MPU {
                     Permission::NoAccess => RegionAttributes::AP::PrivilegedOnlyReadOnly,
                     Permission::PrivilegedOnly => RegionAttributes::AP::PrivilegedOnly,
                     _ => {
-                        return ReturnCode::FAIL;
+                        panic!("");
                     } // Not supported
                 }
             }
@@ -185,10 +178,10 @@ impl MPU {
 
             if exponent < 5 {
                 // Region sizes must be 32 Bytes or larger
-                return ReturnCode::FAIL;
+                panic!("");
             } else if exponent > 32 {
                 // Region sizes must be 4GB or smaller
-                return ReturnCode::FAIL;
+                panic!("");
             }
 
             let address_value = (start >> 5) as u32;
@@ -241,13 +234,13 @@ impl MPU {
                 // Sanity check that the amount left over space in the region
                 // after `start` is at least as large as the memory region we
                 // want to reference.
-                return ReturnCode::FAIL;
+                panic!("");
             }
             if len % subregion_size != 0 {
                 // Sanity check that there is some integer X such that
                 // subregion_size * X == len so none of `len` is left over when
                 // we take the max_subregion.
-                return ReturnCode::FAIL;
+                panic!("");
             }
 
             // The index of the first subregion to activate is the number of
@@ -263,10 +256,10 @@ impl MPU {
             let exponent = region_len.exp::<u32>();
             if exponent < 7 {
                 // Subregions only supported for regions sizes 128 bytes and up.
-                return ReturnCode::FAIL;
+                panic!("");
             } else if exponent > 32 {
                 // Region sizes must be 4GB or smaller
-                return ReturnCode::FAIL;
+                panic!("");
             }
 
             // Turn the min/max subregion into a bitfield where all bits are `1`
@@ -295,7 +288,6 @@ impl MPU {
                     + execute_value,
             );
         }
-        ReturnCode::SUCCESS
     }
 }
 
@@ -319,12 +311,23 @@ impl kernel::mpu::MPU for MPU {
         regs.mpu_type.read(Type::DREGION)
     }
 
-    fn allocate_regions(&self, regions: &[Region]) -> Result<(), usize> {
+    // TODO: actually implement
+    fn request_region(
+        _: usize,
+        _: usize,
+        _: bool,
+        _: bool,
+        _: Permission,
+        _: Permission,
+        _: Permission,
+        _: &[Region],
+    ) -> Option<Region> {
+        Some(Region::empty())
+    }
+
+    fn set_regions(&self, regions: &[Region]) {
         for (index, region) in regions.iter().enumerate() {
-            if let ReturnCode::FAIL = self.allocate_region(region, index) {
-                return Err(index);
-            }
+            self.set_region(region, index);
         }
-        Ok(())
     }
 }
