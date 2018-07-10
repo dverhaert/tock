@@ -12,7 +12,7 @@ pub enum Permission {
 #[derive(Copy, Clone)]
 pub struct Region {
     start: usize,
-    len: usize,
+    end: usize,
     read: Permission,
     write: Permission,
     execute: Permission,
@@ -21,14 +21,14 @@ pub struct Region {
 impl Region {
     pub fn new(
         start: usize,
-        len: usize,
+        end: usize,
         read: Permission,
         write: Permission,
         execute: Permission,
     ) -> Region {
         Region {
             start: start,
-            len: len,
+            end: end,
             read: read,
             write: write,
             execute: execute,
@@ -38,7 +38,7 @@ impl Region {
     pub fn empty() -> Region {
         Region {
             start: 0,
-            len: 0,
+            end: 0,
             read: Permission::NoAccess,
             write: Permission::NoAccess,
             execute: Permission::NoAccess,
@@ -49,8 +49,8 @@ impl Region {
         self.start
     }
 
-    pub fn get_len(&self) -> usize {
-        self.len
+    pub fn get_end(&self) -> usize {
+        self.end
     }
 
     pub fn get_read_permission(&self) -> Permission {
@@ -76,21 +76,44 @@ pub trait MPU {
     /// Returns the number of supported MPU regions.
     fn num_supported_regions(&self) -> u32;
 
-    /// Allocates memory protection regions.
+    /// Requests approval from the MPU for a new region.
     ///
     /// # Arguments
     ///
-    /// `regions`: array of regions to be allocated. The index of the array
-    ///            encodes the priority of the region. In the event of an
-    ///            overlap between regions, the implementor must ensure
-    ///            that the permissions of the region with higher priority
-    ///            take precendence.
+    /// `start`      : the base address of the region
+    /// `end`        : the end address of the region
+    /// `start_fixed`: whether the MPU can adjust the start address or not
+    /// `end_fixed`  : whether the MPU can adjust the end address or not
+    /// `read`       : read permission of the region
+    /// `write`      : write permission of the region
+    /// `execute`    : execute permission of the region.
+    /// `existing`   : regions that have previously been approved by the MPU.
+    ///                The implementor must ensure that the new region does
+    ///                not overlap with any of the previous regions.
     ///
-    /// # Return Value
+    /// # Return Value 
     ///
-    /// If it is infeasible to allocate a memory region, returns its index
-    /// wrapped in a Result.
-    fn allocate_regions(&self, regions: &[Region]) -> Result<(), usize>;
+    /// The function returns a Region struct approved by the MPU, which may
+    /// have a different start or end address than requested if the client
+    /// specified that these addresses are not fixed. If the request was not
+    /// feasible, returns None.
+    fn request_region(
+        start: usize,
+        end: usize,
+        start_fixed: bool,
+        end_fixed: bool,
+        read: Permission,
+        write: Permission,
+        execute: Permission,
+        existing: &[Region],
+    ) -> Option<Region>; 
+
+    /// Sets memory protection regions in the MPU.
+    ///
+    /// # Arguments
+    ///
+    /// `regions`: array of regions to be allocated
+    fn set_regions(&self, regions: &[Region]);
 }
 
 /// No-op implementation of MPU trait
@@ -103,7 +126,18 @@ impl MPU for () {
         8
     }
 
-    fn allocate_regions(&self, _: &[Region]) -> Result<(), usize> {
-        Ok(())
+    fn request_region(
+        _: usize,
+        _: usize,
+        _: bool,
+        _: bool,
+        _: Permission,
+        _: Permission,
+        _: Permission,
+        _: &[Region],
+    ) -> Option<Region> {
+        Some(Region::empty())
     }
+
+    fn set_regions(&self, _: &[Region]) {}
 }
