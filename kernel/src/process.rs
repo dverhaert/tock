@@ -473,13 +473,17 @@ impl Process<'a> {
 
     crate fn setup_mpu<MPU: mpu::MPU>(&self, mpu: &MPU) {
         let num_regions = mpu.num_supported_regions();
+
+        // TODO
         if num_regions != 8 {
             panic!("Currently Tock assumes 8 regions");
         }
 
         let mut regions = [mpu::Region::empty(); 8];
 
-        // Flash region: priority 0
+        // TODO: don't hard code regions, get them from request_region() 
+
+        // Flash region
         let flash_region = mpu::Region::new(
             self.flash.as_ptr() as usize,
             self.flash.len(),
@@ -490,7 +494,7 @@ impl Process<'a> {
 
         regions[0] = flash_region;
 
-        // Memory region: priority 1
+        // Memory region
         let memory_region = mpu::Region::new(
             self.memory.as_ptr() as usize,
             self.memory.len(),
@@ -515,7 +519,7 @@ impl Process<'a> {
                 .offset(-(grant_len as isize))
         };
 
-        // Grant region: priority 2
+        // Grant region
         let grant_region = mpu::Region::new(
             grant_base as usize,
             grant_len as usize,
@@ -526,7 +530,7 @@ impl Process<'a> {
 
         regions[2] = grant_region;
 
-        // IPC regions: priorities 3-7
+        // IPC regions
         for (i, region) in self.mpu_regions.iter().enumerate() {
             let mut ipc_region = mpu::Region::empty();
 
@@ -544,9 +548,7 @@ impl Process<'a> {
         }
 
         // Allocate MPU regions
-        if let Err(index) = mpu.allocate_regions(&regions) {
-            panic!("Unable to allocate MPU region at index {}.", index);
-        }
+        mpu.set_regions(&regions);
     }
 
     crate fn add_mpu_region(&self, base: *const u8, size: u32) -> bool {
