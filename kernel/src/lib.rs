@@ -8,7 +8,8 @@
 
 #![feature(asm, core_intrinsics, unique, ptr_internals, const_fn)]
 #![feature(use_extern_macros, try_from, used)]
-#![feature(in_band_lifetimes)]
+#![feature(in_band_lifetimes, crate_visibility_modifier)]
+#![warn(unreachable_pub)]
 #![no_std]
 
 extern crate tock_cells;
@@ -43,7 +44,7 @@ pub use platform::systick::SysTick;
 pub use platform::{mpu, Chip, Platform};
 pub use platform::{ClockInterface, NoClockControl, NO_CLOCK_CONTROL};
 pub use returncode::ReturnCode;
-pub use sched::kernel_loop;
+pub use sched::Kernel;
 
 // These symbols must be exported for the arch crate to access them.
 pub use process::APP_FAULT;

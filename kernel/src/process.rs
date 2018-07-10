@@ -1,7 +1,6 @@
 //! Support for creating and running userspace applications.
 
 use callback::AppId;
-use common::cells::VolatileCell;
 use common::{Queue, RingBuffer};
 
 use core::cell::Cell;
@@ -13,6 +12,7 @@ use grant;
 use common::math;
 use platform::mpu;
 use returncode::ReturnCode;
+use sched::Kernel;
 use syscall::Syscall;
 use tbfheader;
 
@@ -34,10 +34,10 @@ static mut SCB_REGISTERS: [u32; 5] = [0; 5];
 
 #[allow(improper_ctypes)]
 extern "C" {
-    pub fn switch_to_user(user_stack: *const u8, process_regs: &mut [usize; 8]) -> *mut u8;
+    crate fn switch_to_user(user_stack: *const u8, process_regs: &mut [usize; 8]) -> *mut u8;
 }
 
-pub static mut PROCS: &'static mut [Option<&mut Process<'static>>] = &mut [];
+crate static mut PROCS: &'static mut [Option<&mut Process<'static>>] = &mut [];
 
 /// Helper function to load processes from flash into an array of active
 /// processes. This is the default template for loading processes, but a board
@@ -50,6 +50,7 @@ pub static mut PROCS: &'static mut [Option<&mut Process<'static>>] = &mut [];
 /// provided array. How process faults are handled by the kernel is also
 /// selected.
 pub unsafe fn load_processes(
+    kernel: &'static Kernel,
     start_of_flash: *const u8,
     app_memory: &mut [u8],
     procs: &mut [Option<&mut Process<'static>>],
@@ -60,6 +61,7 @@ pub unsafe fn load_processes(
     let mut app_memory_size = app_memory.len();
     for i in 0..procs.len() {
         let (process, flash_offset, memory_offset) = Process::create(
+            kernel,
             apps_in_flash_ptr,
             app_memory_ptr,
             app_memory_size,
@@ -84,7 +86,7 @@ pub unsafe fn load_processes(
     }
 }
 
-pub fn schedule(callback: FunctionCall, appid: AppId) -> bool {
+crate fn schedule(callback: FunctionCall, appid: AppId) -> bool {
     let procs = unsafe { &mut PROCS };
     let idx = appid.idx();
     if idx >= procs.len() {
@@ -93,29 +95,7 @@ pub fn schedule(callback: FunctionCall, appid: AppId) -> bool {
 
     match procs[idx] {
         None => false,
-        Some(ref mut p) => {
-            // If this app is in the `Fault` state then we shouldn't schedule
-            // any work for it.
-            if p.current_state() == State::Fault {
-                return false;
-            }
-
-            unsafe {
-                HAVE_WORK.set(HAVE_WORK.get() + 1);
-            }
-
-            let ret = p.tasks.enqueue(Task::FunctionCall(callback));
-
-            // Make a note that we lost this callback if the enqueue function
-            // fails.
-            if ret == false {
-                p.debug
-                    .dropped_callback_count
-                    .set(p.debug.dropped_callback_count.get() + 1);
-            }
-
-            ret
-        }
+        Some(ref mut p) => p.schedule(callback),
     }
 }
 
@@ -123,7 +103,7 @@ pub fn schedule(callback: FunctionCall, appid: AppId) -> bool {
 /// app owns and can write to. This includes the app's code and data and any
 /// padding at the end of the app. It does not include the TBF header, or any
 /// space that the kernel is using for any potential bookkeeping.
-pub fn get_editable_flash_range(app_idx: usize) -> (usize, usize) {
+crate fn get_editable_flash_range(app_idx: usize) -> (usize, usize) {
     let procs = unsafe { &mut PROCS };
     if app_idx >= procs.len() {
         return (0, 0);
@@ -157,7 +137,7 @@ impl From<Error> for ReturnCode {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum State {
+crate enum State {
     Running,
     Yielded,
     Fault,
@@ -176,18 +156,18 @@ pub enum IPCType {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub enum Task {
+crate enum Task {
     FunctionCall(FunctionCall),
     IPC((AppId, IPCType)),
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct FunctionCall {
-    pub r0: usize,
-    pub r1: usize,
-    pub r2: usize,
-    pub r3: usize,
-    pub pc: usize,
+crate struct FunctionCall {
+    crate r0: usize,
+    crate r1: usize,
+    crate r2: usize,
+    crate r3: usize,
+    crate pc: usize,
 }
 
 #[derive(Default)]
@@ -234,6 +214,9 @@ struct ProcessDebug {
 }
 
 pub struct Process<'a> {
+    /// Pointer to the main Kernel struct.
+    kernel: &'static Kernel,
+
     /// Application memory layout:
     ///
     /// ```text
@@ -322,18 +305,31 @@ pub struct Process<'a> {
     debug: ProcessDebug,
 }
 
-// Stores the current number of callbacks enqueued + processes in Running state
-static mut HAVE_WORK: VolatileCell<usize> = VolatileCell::new(0);
-
-pub fn processes_blocked() -> bool {
-    unsafe { HAVE_WORK.get() == 0 }
-}
-
 impl Process<'a> {
-    pub fn schedule_ipc(&mut self, from: AppId, cb_type: IPCType) {
-        unsafe {
-            HAVE_WORK.set(HAVE_WORK.get() + 1);
+    crate fn schedule(&mut self, callback: FunctionCall) -> bool {
+        // If this app is in the `Fault` state then we shouldn't schedule
+        // any work for it.
+        if self.current_state() == State::Fault {
+            return false;
         }
+
+        self.kernel.increment_work();
+
+        let ret = self.tasks.enqueue(Task::FunctionCall(callback));
+
+        // Make a note that we lost this callback if the enqueue function
+        // fails.
+        if ret == false {
+            self.debug
+                .dropped_callback_count
+                .set(self.debug.dropped_callback_count.get() + 1);
+        }
+
+        ret
+    }
+
+    crate fn schedule_ipc(&mut self, from: AppId, cb_type: IPCType) {
+        self.kernel.increment_work();
         let ret = self.tasks.enqueue(Task::IPC((from, cb_type)));
 
         // Make a note that we lost this callback if the enqueue function
@@ -345,20 +341,18 @@ impl Process<'a> {
         }
     }
 
-    pub fn current_state(&self) -> State {
+    crate fn current_state(&self) -> State {
         self.state
     }
 
-    pub fn yield_state(&mut self) {
+    crate fn yield_state(&mut self) {
         if self.state == State::Running {
             self.state = State::Yielded;
-            unsafe {
-                HAVE_WORK.set(HAVE_WORK.get() - 1);
-            }
+            self.kernel.decrement_work();
         }
     }
 
-    pub unsafe fn fault_state(&mut self) {
+    crate unsafe fn fault_state(&mut self) {
         write_volatile(&mut APP_FAULT, 0);
         self.state = State::Fault;
 
@@ -370,11 +364,8 @@ impl Process<'a> {
             FaultResponse::Restart => {
                 // Remove the tasks that were scheduled for the app from the
                 // amount of work queue.
-                if HAVE_WORK.get() < self.tasks.len() {
-                    // This case should never happen.
-                    HAVE_WORK.set(0);
-                } else {
-                    HAVE_WORK.set(HAVE_WORK.get() - self.tasks.len());
+                for _ in 0..self.tasks.len() {
+                    self.kernel.decrement_work();
                 }
 
                 // And remove those tasks
@@ -420,53 +411,51 @@ impl Process<'a> {
                     r3: self.app_break as usize,
                 }));
 
-                HAVE_WORK.set(HAVE_WORK.get() + 1);
+                self.kernel.increment_work();
             }
         }
     }
 
-    pub fn dequeue_task(&mut self) -> Option<Task> {
+    crate fn dequeue_task(&mut self) -> Option<Task> {
         self.tasks.dequeue().map(|cb| {
-            unsafe {
-                HAVE_WORK.set(HAVE_WORK.get() - 1);
-            }
+            self.kernel.decrement_work();
             cb
         })
     }
 
-    pub fn mem_start(&self) -> *const u8 {
+    crate fn mem_start(&self) -> *const u8 {
         self.memory.as_ptr()
     }
 
-    pub fn mem_end(&self) -> *const u8 {
+    crate fn mem_end(&self) -> *const u8 {
         unsafe { self.memory.as_ptr().offset(self.memory.len() as isize) }
     }
 
-    pub fn flash_start(&self) -> *const u8 {
+    crate fn flash_start(&self) -> *const u8 {
         self.flash.as_ptr()
     }
 
-    pub fn flash_non_protected_start(&self) -> *const u8 {
+    crate fn flash_non_protected_start(&self) -> *const u8 {
         ((self.flash.as_ptr() as usize) + self.header.get_protected_size() as usize) as *const u8
     }
 
-    pub fn flash_end(&self) -> *const u8 {
+    crate fn flash_end(&self) -> *const u8 {
         unsafe { self.flash.as_ptr().offset(self.flash.len() as isize) }
     }
 
-    pub fn kernel_memory_break(&self) -> *const u8 {
+    crate fn kernel_memory_break(&self) -> *const u8 {
         self.kernel_memory_break
     }
 
-    pub fn number_writeable_flash_regions(&self) -> usize {
+    crate fn number_writeable_flash_regions(&self) -> usize {
         self.header.number_writeable_flash_regions()
     }
 
-    pub fn get_writeable_flash_region(&self, region_index: usize) -> (u32, u32) {
+    crate fn get_writeable_flash_region(&self, region_index: usize) -> (u32, u32) {
         self.header.get_writeable_flash_region(region_index)
     }
 
-    pub fn update_stack_start_pointer(&mut self, stack_pointer: *const u8) {
+    crate fn update_stack_start_pointer(&mut self, stack_pointer: *const u8) {
         if stack_pointer >= self.mem_start() && stack_pointer < self.mem_end() {
             self.debug.app_stack_start_pointer = Some(stack_pointer);
 
@@ -476,13 +465,13 @@ impl Process<'a> {
         }
     }
 
-    pub fn update_heap_start_pointer(&mut self, heap_pointer: *const u8) {
+    crate fn update_heap_start_pointer(&mut self, heap_pointer: *const u8) {
         if heap_pointer >= self.mem_start() && heap_pointer < self.mem_end() {
             self.debug.app_heap_start_pointer = Some(heap_pointer);
         }
     }
 
-    pub fn setup_mpu<MPU: mpu::MPU>(&self, mpu: &MPU) {
+    crate fn setup_mpu<MPU: mpu::MPU>(&self, mpu: &MPU) {
         let num_regions = mpu.num_supported_regions();
         if num_regions != 8 {
             panic!("Currently Tock assumes 8 regions");
@@ -560,7 +549,7 @@ impl Process<'a> {
         }
     }
 
-    pub fn add_mpu_region(&self, base: *const u8, size: u32) -> bool {
+    crate fn add_mpu_region(&self, base: *const u8, size: u32) -> bool {
         if size >= 16 && size.count_ones() == 1 && (base as u32) % size == 0 {
             let mpu_size = math::PowerOfTwo::floor(size);
             for region in self.mpu_regions.iter() {
@@ -578,7 +567,8 @@ impl Process<'a> {
         return false;
     }
 
-    pub unsafe fn create(
+    crate unsafe fn create(
+        kernel: &'static Kernel,
         app_flash_address: *const u8,
         remaining_app_memory: *mut u8,
         remaining_app_memory_size: usize,
@@ -681,6 +671,7 @@ impl Process<'a> {
             let mut process: &mut Process =
                 &mut *(process_struct_memory_location as *mut Process<'static>);
 
+            process.kernel = kernel;
             process.memory = app_memory;
             process.header = tbf_header;
             process.kernel_memory_break = kernel_memory_break;
@@ -739,19 +730,19 @@ impl Process<'a> {
                 r3: process.app_break as usize,
             }));
 
-            HAVE_WORK.set(HAVE_WORK.get() + 1);
+            kernel.increment_work();
 
             return (Some(process), app_flash_size, app_ram_size);
         }
         (None, 0, 0)
     }
 
-    pub fn sbrk(&mut self, increment: isize) -> Result<*const u8, Error> {
+    crate fn sbrk(&mut self, increment: isize) -> Result<*const u8, Error> {
         let new_break = unsafe { self.app_break.offset(increment) };
         self.brk(new_break)
     }
 
-    pub fn brk(&mut self, new_break: *const u8) -> Result<*const u8, Error> {
+    crate fn brk(&mut self, new_break: *const u8) -> Result<*const u8, Error> {
         if new_break < self.mem_start() || new_break >= self.mem_end() {
             Err(Error::AddressOutOfBounds)
         } else if new_break > self.kernel_memory_break {
@@ -763,13 +754,13 @@ impl Process<'a> {
         }
     }
 
-    pub fn in_exposed_bounds(&self, buf_start_addr: *const u8, size: usize) -> bool {
+    crate fn in_exposed_bounds(&self, buf_start_addr: *const u8, size: usize) -> bool {
         let buf_end_addr = unsafe { buf_start_addr.offset(size as isize) };
 
         buf_start_addr >= self.mem_start() && buf_end_addr <= self.mem_end()
     }
 
-    pub unsafe fn alloc(&mut self, size: usize) -> Option<&mut [u8]> {
+    crate unsafe fn alloc(&mut self, size: usize) -> Option<&mut [u8]> {
         let new_break = self.kernel_memory_break.offset(-(size as isize));
         if new_break < self.app_break {
             None
@@ -779,7 +770,7 @@ impl Process<'a> {
         }
     }
 
-    pub unsafe fn free<T>(&mut self, _: *mut T) {}
+    crate unsafe fn free<T>(&mut self, _: *mut T) {}
 
     unsafe fn grant_ptr<T>(&self, grant_num: usize) -> *mut *mut T {
         let grant_num = grant_num as isize;
@@ -796,11 +787,11 @@ impl Process<'a> {
         }
     }
 
-    pub unsafe fn grant_for<T>(&mut self, grant_num: usize) -> *mut T {
+    crate unsafe fn grant_for<T>(&mut self, grant_num: usize) -> *mut T {
         *self.grant_ptr(grant_num)
     }
 
-    pub unsafe fn grant_for_or_alloc<T: Default>(&mut self, grant_num: usize) -> Option<*mut T> {
+    crate unsafe fn grant_for_or_alloc<T: Default>(&mut self, grant_num: usize) -> Option<*mut T> {
         let ctr_ptr = self.grant_ptr::<T>(grant_num);
         if (*ctr_ptr).is_null() {
             self.alloc(mem::size_of::<T>()).map(|root_arr| {
@@ -818,7 +809,7 @@ impl Process<'a> {
         }
     }
 
-    pub fn pop_syscall_stack(&mut self) {
+    crate fn pop_syscall_stack(&mut self) {
         let pspr = self.current_stack_pointer as *const usize;
         unsafe {
             self.yield_pc = read_volatile(pspr.offset(6));
@@ -832,8 +823,8 @@ impl Process<'a> {
     }
 
     /// Context switch to the process.
-    pub unsafe fn push_function_call(&mut self, callback: FunctionCall) {
-        HAVE_WORK.set(HAVE_WORK.get() + 1);
+    crate unsafe fn push_function_call(&mut self, callback: FunctionCall) {
+        self.kernel.increment_work();
 
         self.state = State::Running;
         // Fill in initial stack expected by SVC handler
@@ -857,16 +848,16 @@ impl Process<'a> {
         }
     }
 
-    pub unsafe fn app_fault(&self) -> bool {
+    crate unsafe fn app_fault(&self) -> bool {
         read_volatile(&APP_FAULT) != 0
     }
 
-    pub unsafe fn syscall_fired(&self) -> bool {
+    crate unsafe fn syscall_fired(&self) -> bool {
         read_volatile(&SYSCALL_FIRED) != 0
     }
 
     /// Context switch to the process.
-    pub unsafe fn switch_to(&mut self) {
+    crate unsafe fn switch_to(&mut self) {
         write_volatile(&mut SYSCALL_FIRED, 0);
         let psp = switch_to_user(
             self.current_stack_pointer,
@@ -878,7 +869,7 @@ impl Process<'a> {
         }
     }
 
-    pub fn svc_number(&self) -> Option<Syscall> {
+    crate fn svc_number(&self) -> Option<Syscall> {
         let psp = self.current_stack_pointer as *const *const u16;
         unsafe {
             let pcptr = read_volatile((psp as *const *const u16).offset(6));
@@ -895,58 +886,58 @@ impl Process<'a> {
         }
     }
 
-    pub fn incr_syscall_count(&self) {
+    crate fn incr_syscall_count(&self) {
         self.debug
             .syscall_count
             .set(self.debug.syscall_count.get() + 1);
         self.debug.last_syscall.set(self.svc_number());
     }
 
-    pub fn sp(&self) -> usize {
+    crate fn sp(&self) -> usize {
         self.current_stack_pointer as usize
     }
 
-    pub fn lr(&self) -> usize {
+    crate fn lr(&self) -> usize {
         let pspr = self.current_stack_pointer as *const usize;
         unsafe { read_volatile(pspr.offset(5)) }
     }
 
-    pub fn pc(&self) -> usize {
+    crate fn pc(&self) -> usize {
         let pspr = self.current_stack_pointer as *const usize;
         unsafe { read_volatile(pspr.offset(6)) }
     }
 
-    pub fn r0(&self) -> usize {
+    crate fn r0(&self) -> usize {
         let pspr = self.current_stack_pointer as *const usize;
         unsafe { read_volatile(pspr) }
     }
 
-    pub fn set_return_code(&mut self, return_code: ReturnCode) {
+    crate fn set_return_code(&mut self, return_code: ReturnCode) {
         let r: isize = return_code.into();
         self.set_r0(r);
     }
 
-    pub fn set_r0(&mut self, val: isize) {
+    crate fn set_r0(&mut self, val: isize) {
         let pspr = self.current_stack_pointer as *mut isize;
         unsafe { write_volatile(pspr, val) }
     }
 
-    pub fn r1(&self) -> usize {
+    crate fn r1(&self) -> usize {
         let pspr = self.current_stack_pointer as *const usize;
         unsafe { read_volatile(pspr.offset(1)) }
     }
 
-    pub fn r2(&self) -> usize {
+    crate fn r2(&self) -> usize {
         let pspr = self.current_stack_pointer as *const usize;
         unsafe { read_volatile(pspr.offset(2)) }
     }
 
-    pub fn r3(&self) -> usize {
+    crate fn r3(&self) -> usize {
         let pspr = self.current_stack_pointer as *const usize;
         unsafe { read_volatile(pspr.offset(3)) }
     }
 
-    pub fn r12(&self) -> usize {
+    crate fn r12(&self) -> usize {
         let pspr = self.current_stack_pointer as *const usize;
         unsafe { read_volatile(pspr.offset(4)) }
     }
@@ -956,7 +947,7 @@ impl Process<'a> {
         unsafe { read_volatile(pspr.offset(7)) }
     }
 
-    pub unsafe fn fault_str<W: Write>(&mut self, writer: &mut W) {
+    crate unsafe fn fault_str<W: Write>(&mut self, writer: &mut W) {
         let _ccr = SCB_REGISTERS[0];
         let cfsr = SCB_REGISTERS[1];
         let hfsr = SCB_REGISTERS[2];
@@ -1135,7 +1126,7 @@ impl Process<'a> {
         }
     }
 
-    pub unsafe fn statistics_str<W: Write>(&mut self, writer: &mut W) {
+    crate unsafe fn statistics_str<W: Write>(&mut self, writer: &mut W) {
         // Flash
         let flash_end = self.flash.as_ptr().offset(self.flash.len() as isize) as usize;
         let flash_start = self.flash.as_ptr() as usize;
