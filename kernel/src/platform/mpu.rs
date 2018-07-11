@@ -102,7 +102,7 @@ impl Boundary {
 }
 
 pub trait MPU {
-    type MpuState: Copy;
+    type MpuState;
 
     /// Enables the MPU.
     fn enable_mpu(&self);
@@ -113,18 +113,20 @@ pub trait MPU {
     /// Returns the number of supported MPU regions.
     fn num_supported_regions(&self) -> u32;
 
-    /// Requests a set of logical regions from the MPU.
+    /// Allocates a set of logical regions in the MPU.
     ///
     /// # Arguments
     ///
     /// `regions`   : an array of disjoint logical regions.
-    /// `boundaries`: an array of region boundary parameters. Each index
-    ///               contains boundary information specifying whether the 
-    ///               logical region in `regions` of corresponding index has 
-    ///               fixed start and end addresses, or whether the MPU is 
+    /// `boundaries`: an array of region boundary parameters. The parameters 
+    ///               at each index specify whether the region at that index
+    ///               in `regions` has fixed start and end addresses that
+    ///               must be respected by the MPU, or whether the MPU is 
     ///               allowed to extend them downward or upward respectively. 
     ///               The size of this array must equal that of `regions`.
-    /// `state`     :
+    /// `state`     : MPU state. The MPU writes configuration data
+    ///               to this field implementing the client's requested 
+    ///               regions.
     ///
     /// # Return Value 
     ///
@@ -136,17 +138,17 @@ pub trait MPU {
         state: &mut Self::MpuState,
     ) -> Result<(), usize>; 
 
-    /// Configures memory protection regions in the MPU using stored state.
+    /// Configures memory protection regions in the MPU.
     ///
     /// # Arguments
     ///
-    /// `state`: 
+    /// `state`: state used to set regions.
     fn configure_mpu(&self, state: &Self::MpuState);
 }
 
 /// No-op implementation of MPU trait
 impl MPU for () {
-    type MpuState = Region;   
+    type MpuState = [Region; 8];   
 
     fn enable_mpu(&self) {}
 
