@@ -1,5 +1,6 @@
 //! Interface for configuring the Memory Protection Unit.
 
+
 #[derive(Copy, Clone)]
 pub enum Permission {
     //                 Privileged  Unprivileged
@@ -64,9 +65,45 @@ impl Region {
     pub fn get_execute_permission(&self) -> Permission {
         self.execute
     }
+
+    pub fn set_start(&self, start: usize) {
+        self.start = start;
+    }
+    
+    pub fn set_end(&self, end: usize) {
+        self.end = end;
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct Boundary {
+    start_fixed: bool,
+    end_fixed: bool,
+}
+
+impl Boundary {
+    pub fn new(
+        start_fixed: bool, 
+        end_fixed: bool
+    ) -> Boundary {
+        Boundary{
+            start_fixed: start_fixed,
+            end_fixed: end_fixed,
+        }
+    }
+
+    pub fn start_fixed(&self) -> bool {
+        return self.start_fixed;
+    }
+    
+    pub fn end_fixed(&self) -> bool {
+        return self.end_fixed;
+    }
 }
 
 pub trait MPU {
+    type MpuState: Copy;
+
     /// Enables the MPU.
     fn enable_mpu(&self);
 
@@ -76,48 +113,41 @@ pub trait MPU {
     /// Returns the number of supported MPU regions.
     fn num_supported_regions(&self) -> u32;
 
-    /// Requests approval from the MPU for a new region.
+    /// Requests a set of logical regions from the MPU.
     ///
     /// # Arguments
     ///
-    /// `start`      : the base address of the region
-    /// `end`        : the end address of the region
-    /// `start_fixed`: whether the MPU can adjust the start address or not
-    /// `end_fixed`  : whether the MPU can adjust the end address or not
-    /// `read`       : read permission of the region
-    /// `write`      : write permission of the region
-    /// `execute`    : execute permission of the region.
-    /// `existing`   : regions that have previously been approved by the MPU.
-    ///                The implementor must ensure that the new region does
-    ///                not overlap with any of the previous regions.
+    /// `regions`   : an array of disjoint logical regions.
+    /// `boundaries`: an array of region boundary parameters. Each index
+    ///               contains boundary information specifying whether the 
+    ///               logical region in `regions` of corresponding index has 
+    ///               fixed start and end addresses, or whether the MPU is 
+    ///               allowed to extend them downward or upward respectively. 
+    ///               The size of this array must equal that of `regions`.
+    /// `state`     :
     ///
     /// # Return Value 
     ///
-    /// The function returns a Region struct approved by the MPU, which may
-    /// have a different start or end address than requested if the client
-    /// specified that these addresses are not fixed. If the request was not
-    /// feasible, returns None.
-    fn request_region(
-        start: usize,
-        end: usize,
-        start_fixed: bool,
-        end_fixed: bool,
-        read: Permission,
-        write: Permission,
-        execute: Permission,
-        existing: &[Region],
-    ) -> Option<Region>; 
+    /// If it is infeasible to allocate a memory region, returns its index
+    /// wrapped in a Result.
+    fn allocate_regions(
+        regions: &mut [Region],
+        boundaries: &[Boundary],
+        state: &mut Self::MpuState,
+    ) -> Result<(), usize>; 
 
-    /// Sets memory protection regions in the MPU.
+    /// Configures memory protection regions in the MPU using stored state.
     ///
     /// # Arguments
     ///
-    /// `regions`: array of regions to be allocated
-    fn set_regions(&self, regions: &[Region]);
+    /// `state`: 
+    fn configure_mpu(&self, state: &Self::MpuState);
 }
 
 /// No-op implementation of MPU trait
 impl MPU for () {
+    type MpuState = Region;   
+
     fn enable_mpu(&self) {}
 
     fn disable_mpu(&self) {}
@@ -126,18 +156,13 @@ impl MPU for () {
         8
     }
 
-    fn request_region(
-        _: usize,
-        _: usize,
-        _: bool,
-        _: bool,
-        _: Permission,
-        _: Permission,
-        _: Permission,
-        _: &[Region],
-    ) -> Option<Region> {
-        Some(Region::empty())
+    fn allocate_regions(
+        _: &mut [Region],
+        _: &[Boundary],
+        _: &mut Self::MpuState,
+    ) -> Result<(), usize> {
+        Ok(())
     }
 
-    fn set_regions(&self, _: &[Region]) {}
+    fn configure_mpu(&self, _: &Self::MpuState) {}
 }
