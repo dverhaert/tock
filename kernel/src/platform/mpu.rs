@@ -66,38 +66,38 @@ impl Region {
         self.execute
     }
 
-    pub fn set_start(&self, start: usize) {
+    pub fn set_start(&mut self, start: usize) {
         self.start = start;
     }
     
-    pub fn set_end(&self, end: usize) {
+    pub fn set_end(&mut self, end: usize) {
         self.end = end;
     }
 }
 
 #[derive(Copy, Clone)]
 pub struct Boundary {
-    start_fixed: bool,
-    end_fixed: bool,
+    lower_bound: Option<usize>,
+    upper_bound: Option<usize>,
 }
 
 impl Boundary {
     pub fn new(
-        start_fixed: bool, 
-        end_fixed: bool
+        lower_bound: Option<usize>,
+        upper_bound: Option<usize>,
     ) -> Boundary {
         Boundary{
-            start_fixed: start_fixed,
-            end_fixed: end_fixed,
+            lower_bound: lower_bound,
+            upper_bound: upper_bound,
         }
     }
 
-    pub fn start_fixed(&self) -> bool {
-        return self.start_fixed;
+    pub fn lower_bound(&self) -> Option<usize> {
+        return self.lower_bound;
     }
     
-    pub fn end_fixed(&self) -> bool {
-        return self.end_fixed;
+    pub fn upper_bound(&self) -> Option<usize> {
+        return self.upper_bound;
     }
 }
 
@@ -135,8 +135,7 @@ pub trait MPU {
     fn allocate_regions(
         regions: &mut [Region],
         boundaries: &[Boundary],
-        state: &mut Self::MpuState,
-    ) -> Result<(), usize>; 
+    ) -> Result<Self::MpuState, usize>; 
 
     /// Configures memory protection regions in the MPU.
     ///
@@ -148,7 +147,7 @@ pub trait MPU {
 
 /// No-op implementation of MPU trait
 impl MPU for () {
-    type MpuState = [Region; 8];   
+    type MpuState = ();   
 
     fn enable_mpu(&self) {}
 
@@ -161,8 +160,7 @@ impl MPU for () {
     fn allocate_regions(
         _: &mut [Region],
         _: &[Boundary],
-        _: &mut Self::MpuState,
-    ) -> Result<(), usize> {
+    ) -> Result<Self::MpuState, usize> {
         Ok(())
     }
 

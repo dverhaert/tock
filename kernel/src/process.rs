@@ -481,6 +481,8 @@ impl Process<'a> {
 
         let mut regions = [mpu::Region::empty(); 8];
 
+        let boundaries = [mpu::Boundary::new(None, None); 8];
+
         // TODO: don't hard code regions, get them from request_region() 
 
         // Flash region
@@ -547,8 +549,10 @@ impl Process<'a> {
             regions[i + 3] = ipc_region;
         }
 
-        // Allocate MPU regions
-        mpu.set_regions(&regions);
+        let state = MPU::allocate_regions(&mut regions, &boundaries).unwrap();
+
+        // Set MPU regions
+        mpu.configure_mpu(&state);
     }
 
     crate fn add_mpu_region(&self, base: *const u8, size: u32) -> bool {

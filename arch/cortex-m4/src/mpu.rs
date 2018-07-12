@@ -4,7 +4,7 @@ use kernel;
 use kernel::common::math::PowerOfTwo;
 use kernel::common::regs::{ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
-use kernel::mpu::{Permission, Region};
+use kernel::mpu::{Permission, Region, Boundary};
 
 #[repr(C)]
 /// MPU Registers for the Cortex-M4 family
@@ -292,6 +292,9 @@ impl MPU {
 }
 
 impl kernel::mpu::MPU for MPU {
+    // TODO
+    type MpuState = ();
+
     fn enable_mpu(&self) {
         let regs = &*self.0;
 
@@ -310,24 +313,15 @@ impl kernel::mpu::MPU for MPU {
         let regs = &*self.0;
         regs.mpu_type.read(Type::DREGION)
     }
-
-    // TODO: actually implement
-    fn request_region(
-        _: usize,
-        _: usize,
-        _: bool,
-        _: bool,
-        _: Permission,
-        _: Permission,
-        _: Permission,
-        _: &[Region],
-    ) -> Option<Region> {
-        Some(Region::empty())
+    
+    // TODO
+    fn allocate_regions(
+        regions: &mut [Region],
+        boundaries: &[Boundary],
+    ) -> Result<Self::MpuState, usize> {
+        Ok(()) 
     }
 
-    fn set_regions(&self, regions: &[Region]) {
-        for (index, region) in regions.iter().enumerate() {
-            self.set_region(region, index);
-        }
+    fn configure_mpu(&self, state: &Self::MpuState) {
     }
 }
