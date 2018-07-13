@@ -11,9 +11,17 @@ pub enum Permission {
 }
 
 #[derive(Copy, Clone)]
+pub enum Boundary {
+    Fixed,
+    FlexibleWithBound(usize),
+}
+
+#[derive(Copy, Clone)]
 pub struct Region {
     start: usize,
     end: usize,
+    start_boundary: Boundary,
+    end_boundary: Boundary,
     read: Permission,
     write: Permission,
     execute: Permission,
@@ -23,6 +31,8 @@ impl Region {
     pub fn new(
         start: usize,
         end: usize,
+        start_boundary: Boundary,
+        end_boundary: Boundary,
         read: Permission,
         write: Permission,
         execute: Permission,
@@ -30,6 +40,8 @@ impl Region {
         Region {
             start: start,
             end: end,
+            start_boundary: start_boundary,
+            end_boundary: end_boundary,
             read: read,
             write: write,
             execute: execute,
@@ -40,6 +52,8 @@ impl Region {
         Region {
             start: 0,
             end: 0,
+            start_boundary: Boundary::Fixed,
+            end_boundary: Boundary::Fixed,
             read: Permission::NoAccess,
             write: Permission::NoAccess,
             execute: Permission::NoAccess,
@@ -52,6 +66,14 @@ impl Region {
 
     pub fn get_end(&self) -> usize {
         self.end
+    }
+
+    pub fn get_start_boundary(&self) -> Boundary {
+        self.start_boundary
+    }
+    
+    pub fn get_end_boundary(&self) -> Boundary {
+        self.end_boundary
     }
 
     pub fn get_read_permission(&self) -> Permission {
@@ -75,32 +97,6 @@ impl Region {
     }
 }
 
-#[derive(Copy, Clone)]
-pub struct Boundary {
-    lower_bound: Option<usize>,
-    upper_bound: Option<usize>,
-}
-
-impl Boundary {
-    pub fn new(
-        lower_bound: Option<usize>,
-        upper_bound: Option<usize>,
-    ) -> Boundary {
-        Boundary{
-            lower_bound: lower_bound,
-            upper_bound: upper_bound,
-        }
-    }
-
-    pub fn lower_bound(&self) -> Option<usize> {
-        return self.lower_bound;
-    }
-    
-    pub fn upper_bound(&self) -> Option<usize> {
-        return self.upper_bound;
-    }
-}
-
 pub trait MPU {
     type MpuState;
 
@@ -118,23 +114,16 @@ pub trait MPU {
     /// # Arguments
     ///
     /// `regions`   : an array of disjoint logical regions.
-    /// `boundaries`: an array of region boundary parameters. The parameters 
-    ///               at each index specify whether the region at that index
-    ///               in `regions` has fixed start and end addresses that
-    ///               must be respected by the MPU, or whether the MPU is 
-    ///               allowed to extend them downward or upward respectively. 
-    ///               The size of this array must equal that of `regions`.
     /// `state`     : MPU state. The MPU writes configuration data
     ///               to this field implementing the client's requested 
     ///               regions.
     ///
     /// # Return Value 
     ///
-    /// If it is infeasible to allocate a memory region, returns its index
-    /// wrapped in a Result.
+    /// Returns MPU configuration data implementing the requested regions. 
+    /// If it is infeasible to allocate a memory region, returns its index.
     fn allocate_regions(
         regions: &mut [Region],
-        boundaries: &[Boundary],
     ) -> Result<Self::MpuState, usize>; 
 
     /// Configures memory protection regions in the MPU.
@@ -159,7 +148,6 @@ impl MPU for () {
 
     fn allocate_regions(
         _: &mut [Region],
-        _: &[Boundary],
     ) -> Result<Self::MpuState, usize> {
         Ok(())
     }

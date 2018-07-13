@@ -481,14 +481,14 @@ impl Process<'a> {
 
         let mut regions = [mpu::Region::empty(); 8];
 
-        let boundaries = [mpu::Boundary::new(None, None); 8];
-
         // TODO: don't hard code regions, get them from request_region() 
 
         // Flash region
         let flash_region = mpu::Region::new(
             self.flash.as_ptr() as usize,
             self.flash.len(),
+            mpu::Boundary::Fixed,
+            mpu::Boundary::Fixed,
             mpu::Permission::Full,
             mpu::Permission::NoAccess,
             mpu::Permission::Full,
@@ -500,6 +500,8 @@ impl Process<'a> {
         let memory_region = mpu::Region::new(
             self.memory.as_ptr() as usize,
             self.memory.len(),
+            mpu::Boundary::Fixed,
+            mpu::Boundary::Fixed,
             mpu::Permission::Full,
             mpu::Permission::Full,
             mpu::Permission::Full,
@@ -525,6 +527,8 @@ impl Process<'a> {
         let grant_region = mpu::Region::new(
             grant_base as usize,
             grant_len as usize,
+            mpu::Boundary::Fixed,
+            mpu::Boundary::Fixed,
             mpu::Permission::PrivilegedOnly,
             mpu::Permission::PrivilegedOnly,
             mpu::Permission::NoAccess,
@@ -540,6 +544,8 @@ impl Process<'a> {
                 ipc_region = mpu::Region::new(
                     region.get().0 as usize,
                     region.get().1.as_num::<u32>() as usize,
+                    mpu::Boundary::Fixed,
+                    mpu::Boundary::Fixed,
                     mpu::Permission::Full,
                     mpu::Permission::Full,
                     mpu::Permission::Full,
@@ -549,7 +555,7 @@ impl Process<'a> {
             regions[i + 3] = ipc_region;
         }
 
-        let state = MPU::allocate_regions(&mut regions, &boundaries).unwrap();
+        let state = MPU::allocate_regions(&mut regions).unwrap();
 
         // Set MPU regions
         mpu.configure_mpu(&state);

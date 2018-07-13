@@ -2,9 +2,9 @@
 
 use kernel;
 use kernel::common::math::PowerOfTwo;
-use kernel::common::regs::{ReadOnly, ReadWrite};
+use kernel::common::regs::{ReadOnly, ReadWrite, FieldValue};
 use kernel::common::StaticRef;
-use kernel::mpu::{Permission, Region, Boundary};
+use kernel::mpu::{Region, Permission, Boundary};
 
 #[repr(C)]
 /// MPU Registers for the Cortex-M4 family
@@ -291,17 +291,23 @@ impl MPU {
     }
 }
 
+#[derive(Copy, Clone)]
+pub struct RegionConfig {
+    rbar: FieldValue<u32, RegionBaseAddress::Register>,
+    rasr: FieldValue<u32, RegionAttributes::Register>,
+}
+
 impl kernel::mpu::MPU for MPU {
-    // TODO
-    type MpuState = ();
+    type MpuState = [Option<RegionConfig>; 8];
 
     fn enable_mpu(&self) {
         let regs = &*self.0;
 
         // Enable the MPU, disable it during HardFault/NMI handlers, and allow
         // privileged code access to all unprotected memory.
-        regs.ctrl
-            .write(Control::ENABLE::SET + Control::HFNMIENA::CLEAR + Control::PRIVDEFENA::SET);
+        regs.ctrl.write(Control::ENABLE::SET + 
+                        Control::HFNMIENA::CLEAR + 
+                        Control::PRIVDEFENA::SET);
     }
 
     fn disable_mpu(&self) {
@@ -316,12 +322,19 @@ impl kernel::mpu::MPU for MPU {
     
     // TODO
     fn allocate_regions(
-        regions: &mut [Region],
-        boundaries: &[Boundary],
+        _regions: &mut [Region],
     ) -> Result<Self::MpuState, usize> {
-        Ok(()) 
+        Ok([None; 8])
     }
 
     fn configure_mpu(&self, state: &Self::MpuState) {
+        let regs = &*self.0;
+
+        for elem in state {
+            if let Some(region_config) = elem {
+                regs.rbar.write(region_config.rbar);
+                regs.rasr.write(region_config.rasr);    
+            }
+        }
     }
 }
