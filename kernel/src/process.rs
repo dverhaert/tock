@@ -481,7 +481,7 @@ impl Process<'a> {
 
         let mut regions = [mpu::Region::empty(); 8];
 
-        // TODO: don't hard code regions, get them from request_region() 
+        // TODO: don't do this region computation here, store in Process
 
         // Flash region
         let flash_region = mpu::Region::new(
@@ -555,6 +555,7 @@ impl Process<'a> {
             regions[i + 3] = ipc_region;
         }
 
+        // TODO
         let state = MPU::allocate_regions(&mut regions).unwrap();
 
         // Set MPU regions

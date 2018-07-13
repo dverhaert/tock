@@ -293,8 +293,8 @@ impl MPU {
 
 #[derive(Copy, Clone)]
 pub struct RegionConfig {
-    rbar: FieldValue<u32, RegionBaseAddress::Register>,
-    rasr: FieldValue<u32, RegionAttributes::Register>,
+    base_address: FieldValue<u32, RegionBaseAddress::Register>,
+    attributes: FieldValue<u32, RegionAttributes::Register>,
 }
 
 impl kernel::mpu::MPU for MPU {
@@ -332,8 +332,8 @@ impl kernel::mpu::MPU for MPU {
 
         for elem in state {
             if let Some(region_config) = elem {
-                regs.rbar.write(region_config.rbar);
-                regs.rasr.write(region_config.rasr);    
+                regs.rbar.write(region_config.base_address);
+                regs.rasr.write(region_config.attributes);    
             }
         }
     }
