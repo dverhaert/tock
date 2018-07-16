@@ -111,9 +111,7 @@ impl MPU {
         MPU(MPU_BASE_ADDRESS)
     }
 
-    fn set_region(&self, region: &Region, region_num: usize) {
-        let regs = &*self.0;
-
+    pub fn allocate_region(region: &Region, region_num: usize) -> Option<RegionConfig>  {
         let start = region.get_start();
         let len = region.get_end() - start;
         let read = region.get_read_permission();
@@ -124,10 +122,14 @@ impl MPU {
 
         // Empty region
         if len == 0 {
-            regs.rbar.write(
-                RegionBaseAddress::VALID::UseRBAR + RegionBaseAddress::REGION.val(region_value),
-            );
-            regs.rasr.set(0);
+            let base_address = RegionBaseAddress::VALID::UseRBAR + 
+                               RegionBaseAddress::REGION.val(region_value);
+
+            let attributes = RegionAttributes::ENABLE.val(0);
+
+            let config = RegionConfig { base_address, attributes };
+
+            return Some(config)
         }
 
         // Convert execute permission to a bitfield
@@ -135,7 +137,7 @@ impl MPU {
             Permission::NoAccess => RegionAttributes::XN::Disable,
             Permission::Full => RegionAttributes::XN::Enable,
             _ => {
-                panic!("");
+                return None;
             } // Not supported
         };
 
@@ -147,7 +149,7 @@ impl MPU {
                     Permission::NoAccess => RegionAttributes::AP::PrivilegedOnlyReadOnly,
                     Permission::PrivilegedOnly => RegionAttributes::AP::PrivilegedOnly,
                     _ => {
-                        panic!("");
+                        return None;
                     } // Not supported
                 }
             }
@@ -178,27 +180,27 @@ impl MPU {
 
             if exponent < 5 {
                 // Region sizes must be 32 Bytes or larger
-                panic!("");
+                return None;
             } else if exponent > 32 {
                 // Region sizes must be 4GB or smaller
-                panic!("");
+                return None;
             }
 
             let address_value = (start >> 5) as u32;
             let region_len_value = exponent - 1;
 
-            regs.rbar.write(
-                RegionBaseAddress::ADDR.val(address_value)
-                    + RegionBaseAddress::VALID::UseRBAR
-                    + RegionBaseAddress::REGION.val(region_value),
-            );
+            let base_address = RegionBaseAddress::ADDR.val(address_value) + 
+                               RegionBaseAddress::VALID::UseRBAR + 
+                               RegionBaseAddress::REGION.val(region_value);
 
-            regs.rasr.write(
-                RegionAttributes::ENABLE::SET
-                    + RegionAttributes::SIZE.val(region_len_value)
-                    + access_value
-                    + execute_value,
-            );
+            let attributes = RegionAttributes::ENABLE::SET + 
+                             RegionAttributes::SIZE.val(region_len_value) + 
+                             access_value +
+                             execute_value;
+
+            let config = RegionConfig { base_address, attributes };
+
+            return Some(config);
         }
         // Possibility 2
         else {
@@ -234,13 +236,13 @@ impl MPU {
                 // Sanity check that the amount left over space in the region
                 // after `start` is at least as large as the memory region we
                 // want to reference.
-                panic!("");
+                return None;
             }
             if len % subregion_size != 0 {
                 // Sanity check that there is some integer X such that
                 // subregion_size * X == len so none of `len` is left over when
                 // we take the max_subregion.
-                panic!("");
+                return None;
             }
 
             // The index of the first subregion to activate is the number of
@@ -256,10 +258,10 @@ impl MPU {
             let exponent = region_len.exp::<u32>();
             if exponent < 7 {
                 // Subregions only supported for regions sizes 128 bytes and up.
-                panic!("");
+                return None;
             } else if exponent > 32 {
                 // Region sizes must be 4GB or smaller
-                panic!("");
+                return None;
             }
 
             // Turn the min/max subregion into a bitfield where all bits are `1`
@@ -274,27 +276,26 @@ impl MPU {
             let address_value = (region_start >> 5) as u32;
             let region_len_value = exponent - 1;
 
-            regs.rbar.write(
-                RegionBaseAddress::ADDR.val(address_value)
-                    + RegionBaseAddress::VALID::UseRBAR
-                    + RegionBaseAddress::REGION.val(region_value),
-            );
+            let base_address = RegionBaseAddress::ADDR.val(address_value) +
+                               RegionBaseAddress::VALID::UseRBAR +
+                               RegionBaseAddress::REGION.val(region_value);
 
-            regs.rasr.write(
-                RegionAttributes::ENABLE::SET
-                    + RegionAttributes::SRD.val(subregion_mask)
-                    + RegionAttributes::SIZE.val(region_len_value)
-                    + access_value
-                    + execute_value,
-            );
+            let attributes = RegionAttributes::ENABLE::SET +
+                             RegionAttributes::SRD.val(subregion_mask) +
+                             RegionAttributes::SIZE.val(region_len_value) +
+                             access_value +
+                             execute_value;
+
+            let config = RegionConfig { base_address, attributes };
+            Some(config)
         }
     }
 }
 
 #[derive(Copy, Clone)]
 pub struct RegionConfig {
-    base_address: FieldValue<u32, RegionBaseAddress::Register>,
-    attributes: FieldValue<u32, RegionAttributes::Register>,
+    pub base_address: FieldValue<u32, RegionBaseAddress::Register>,
+    pub attributes: FieldValue<u32, RegionAttributes::Register>,
 }
 
 impl kernel::mpu::MPU for MPU {
@@ -320,11 +321,22 @@ impl kernel::mpu::MPU for MPU {
         regs.mpu_type.read(Type::DREGION)
     }
     
-    // TODO
     fn allocate_regions(
-        _regions: &mut [Region],
+        regions: &mut [Region],
     ) -> Result<Self::MpuState, usize> {
-        Ok([None; 8])
+        let mut configs: Self::MpuState = [None; 8]; 
+
+        for (i, region) in regions.iter().enumerate() {
+            if i > 8 {
+                return Err(i);
+            }
+            configs[i] = match MPU::allocate_region(region, i) {
+                Some(config) => Some(config),
+                None => { return Err(i); },
+            };
+        }
+
+        Ok(configs)
     }
 
     fn configure_mpu(&self, state: &Self::MpuState) {

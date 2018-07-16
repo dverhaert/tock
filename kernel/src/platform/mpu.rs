@@ -114,9 +114,6 @@ pub trait MPU {
     /// # Arguments
     ///
     /// `regions`   : an array of disjoint logical regions.
-    /// `state`     : MPU state. The MPU writes configuration data
-    ///               to this field implementing the client's requested 
-    ///               regions.
     ///
     /// # Return Value 
     ///
@@ -124,7 +121,7 @@ pub trait MPU {
     /// If it is infeasible to allocate a memory region, returns its index.
     fn allocate_regions(
         regions: &mut [Region],
-    ) -> Result<Self::MpuState, usize>; 
+    ) -> Result<Self::MpuState, usize>;
 
     /// Configures memory protection regions in the MPU.
     ///
