@@ -476,17 +476,20 @@ impl Process<'a> {
 
         // TODO
         if num_regions != 8 {
-            panic!("Currently Tock assumes 8 regions");
+            //panic!("Currently Tock assumes 8 regions");
         }
 
         let mut regions = [mpu::Region::empty(); 8];
 
         // TODO: don't do this region computation here, store in Process
+        
+        let flash_start = self.flash.as_ptr() as usize;
+        let flash_end = flash_start + self.flash.len();
 
         // Flash region
         let flash_region = mpu::Region::new(
-            self.flash.as_ptr() as usize,
-            self.flash.len(),
+            flash_start,
+            flash_end,
             mpu::Boundary::Fixed,
             mpu::Boundary::Fixed,
             mpu::Permission::Full,
@@ -495,11 +498,14 @@ impl Process<'a> {
         );
 
         regions[0] = flash_region;
+        
+        let memory_start = self.memory.as_ptr() as usize;
+        let memory_end = memory_start + self.memory.len();
 
         // Memory region
         let memory_region = mpu::Region::new(
-            self.memory.as_ptr() as usize,
-            self.memory.len(),
+            memory_start,
+            memory_end,
             mpu::Boundary::Fixed,
             mpu::Boundary::Fixed,
             mpu::Permission::Full,
@@ -513,20 +519,22 @@ impl Process<'a> {
             math::PowerOfTwo::ceiling(
                 self.memory.as_ptr().offset(self.memory.len() as isize) as u32
                     - (self.kernel_memory_break as u32),
-            ).as_num::<u32>()
+            ).as_num::<u32>() as usize
         };
 
-        let grant_base = unsafe {
+        let grant_start = unsafe {
             self.memory
                 .as_ptr()
                 .offset(self.memory.len() as isize)
-                .offset(-(grant_len as isize))
+                .offset(-(grant_len as isize)) as usize
         };
+
+        let grant_end = grant_start + grant_len;
 
         // Grant region
         let grant_region = mpu::Region::new(
-            grant_base as usize,
-            grant_len as usize,
+            grant_start,
+            grant_end,
             mpu::Boundary::Fixed,
             mpu::Boundary::Fixed,
             mpu::Permission::PrivilegedOnly,
@@ -538,21 +546,23 @@ impl Process<'a> {
 
         // IPC regions
         for (i, region) in self.mpu_regions.iter().enumerate() {
-            let mut ipc_region = mpu::Region::empty();
-
             if !region.get().0.is_null() {
-                ipc_region = mpu::Region::new(
-                    region.get().0 as usize,
-                    region.get().1.as_num::<u32>() as usize,
+                let ipc_start = region.get().0 as usize;
+                let ipc_end = ipc_start + region.get().1.as_num::<u32>() as usize;
+
+                let ipc_region = mpu::Region::new(
+                    ipc_start,
+                    ipc_end,
                     mpu::Boundary::Fixed,
                     mpu::Boundary::Fixed,
                     mpu::Permission::Full,
                     mpu::Permission::Full,
                     mpu::Permission::Full,
                 );
+                
+                regions[i + 3] = ipc_region;
             }
 
-            regions[i + 3] = ipc_region;
         }
 
         // TODO

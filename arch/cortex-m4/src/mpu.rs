@@ -131,7 +131,6 @@ impl MPU {
 
             return Some(config)
         }
-
         // Convert execute permission to a bitfield
         let execute_value = match execute {
             Permission::NoAccess => RegionAttributes::XN::Disable,
@@ -327,7 +326,8 @@ impl kernel::mpu::MPU for MPU {
         let mut configs: Self::MpuState = [None; 8]; 
 
         for (i, region) in regions.iter().enumerate() {
-            if i > 8 {
+            // Only have 8 regions
+            if i >= 8 {
                 return Err(i);
             }
             configs[i] = match MPU::allocate_region(region, i) {
