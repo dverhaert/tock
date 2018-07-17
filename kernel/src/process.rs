@@ -566,10 +566,10 @@ impl Process<'a> {
         }
 
         // TODO
-        let state = MPU::allocate_regions(&mut regions).unwrap();
+        let config = MPU::allocate_regions(&mut regions).unwrap();
 
         // Set MPU regions
-        mpu.configure_mpu(&state);
+        mpu.configure_mpu(&config);
     }
 
     crate fn add_mpu_region(&self, base: *const u8, size: u32) -> bool {

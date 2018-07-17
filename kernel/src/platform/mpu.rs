@@ -98,7 +98,7 @@ impl Region {
 }
 
 pub trait MPU {
-    type MpuState;
+    type MpuConfig;
 
     /// Enables the MPU.
     fn enable_mpu(&self);
@@ -121,19 +121,19 @@ pub trait MPU {
     /// If it is infeasible to allocate a memory region, returns its index.
     fn allocate_regions(
         regions: &mut [Region],
-    ) -> Result<Self::MpuState, usize>;
+    ) -> Result<Self::MpuConfig, usize>;
 
     /// Configures memory protection regions in the MPU.
     ///
     /// # Arguments
     ///
-    /// `state`: state used to set regions.
-    fn configure_mpu(&self, state: &Self::MpuState);
+    /// `config`: configuration used to set regions.
+    fn configure_mpu(&self, config: &Self::MpuConfig);
 }
 
 /// No-op implementation of MPU trait
 impl MPU for () {
-    type MpuState = ();   
+    type MpuConfig = ();   
 
     fn enable_mpu(&self) {}
 
@@ -145,9 +145,9 @@ impl MPU for () {
 
     fn allocate_regions(
         _: &mut [Region],
-    ) -> Result<Self::MpuState, usize> {
+    ) -> Result<Self::MpuConfig, usize> {
         Ok(())
     }
 
-    fn configure_mpu(&self, _: &Self::MpuState) {}
+    fn configure_mpu(&self, _: &Self::MpuConfig) {}
 }

@@ -298,7 +298,7 @@ pub struct RegionConfig {
 }
 
 impl kernel::mpu::MPU for MPU {
-    type MpuState = [Option<RegionConfig>; 8];
+    type MpuConfig = [Option<RegionConfig>; 8];
 
     fn enable_mpu(&self) {
         let regs = &*self.0;
@@ -322,8 +322,8 @@ impl kernel::mpu::MPU for MPU {
     
     fn allocate_regions(
         regions: &mut [Region],
-    ) -> Result<Self::MpuState, usize> {
-        let mut configs: Self::MpuState = [None; 8]; 
+    ) -> Result<Self::MpuConfig, usize> {
+        let mut configs = [None; 8]; 
 
         for (i, region) in regions.iter().enumerate() {
             // Only have 8 regions
@@ -339,10 +339,10 @@ impl kernel::mpu::MPU for MPU {
         Ok(configs)
     }
 
-    fn configure_mpu(&self, state: &Self::MpuState) {
+    fn configure_mpu(&self, config: &Self::MpuConfig) {
         let regs = &*self.0;
 
-        for elem in state {
+        for elem in config {
             if let Some(region_config) = elem {
                 regs.rbar.write(region_config.base_address);
                 regs.rasr.write(region_config.attributes);    
