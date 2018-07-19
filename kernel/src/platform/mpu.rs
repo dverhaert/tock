@@ -1,6 +1,5 @@
 //! Interface for configuring the Memory Protection Unit.
 
-
 #[derive(Copy, Clone)]
 pub enum Permission {
     //                 Privileged  Unprivileged
@@ -71,7 +70,7 @@ impl Region {
     pub fn get_start_boundary(&self) -> Boundary {
         self.start_boundary
     }
-    
+
     pub fn get_end_boundary(&self) -> Boundary {
         self.end_boundary
     }
@@ -91,7 +90,7 @@ impl Region {
     pub fn set_start(&mut self, start: usize) {
         self.start = start;
     }
-    
+
     pub fn set_end(&mut self, end: usize) {
         self.end = end;
     }
@@ -115,13 +114,11 @@ pub trait MPU {
     ///
     /// `regions`   : an array of disjoint logical regions.
     ///
-    /// # Return Value 
+    /// # Return Value
     ///
-    /// Returns MPU configuration data implementing the requested regions. 
+    /// Returns MPU configuration data implementing the requested regions.
     /// If it is infeasible to allocate a memory region, returns its index.
-    fn allocate_regions(
-        regions: &mut [Region],
-    ) -> Result<Self::MpuConfig, usize>;
+    fn allocate_regions(regions: &mut [Region]) -> Result<Self::MpuConfig, usize>;
 
     /// Configures memory protection regions in the MPU.
     ///
@@ -133,7 +130,7 @@ pub trait MPU {
 
 /// No-op implementation of MPU trait
 impl MPU for () {
-    type MpuConfig = ();   
+    type MpuConfig = ();
 
     fn enable_mpu(&self) {}
 
@@ -143,9 +140,7 @@ impl MPU for () {
         8
     }
 
-    fn allocate_regions(
-        _: &mut [Region],
-    ) -> Result<Self::MpuConfig, usize> {
+    fn allocate_regions(_: &mut [Region]) -> Result<Self::MpuConfig, usize> {
         Ok(())
     }
 

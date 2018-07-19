@@ -2,9 +2,9 @@
 
 use kernel;
 use kernel::common::math::PowerOfTwo;
-use kernel::common::registers::{ReadOnly, ReadWrite, FieldValue};
+use kernel::common::registers::{FieldValue, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
-use kernel::mpu::{Region, Permission, Boundary};
+use kernel::mpu::{Boundary, Permission, Region};
 
 #[repr(C)]
 /// MPU Registers for the Cortex-M4 family
@@ -15,7 +15,7 @@ pub struct MpuRegisters {
     /// Indicates whether the MPU is present and, if so, how many regions it
     /// supports.
     pub mpu_type: ReadOnly<u32, Type::Register>,
-    
+
     /// The control register:
     ///
     ///   * Enables the MPU (bit 0).
@@ -44,7 +44,7 @@ pub struct MpuRegisters {
     /// [7:0] | REGION   | Region for writes to MPU_RBAR or MPU_RASR. Range 0-7.
     /// ```
     pub rnr: ReadWrite<u32, RegionNumber::Register>,
-    
+
     /// Defines the base address of the currently selected MPU region.
     ///
     /// When writing, the first 3 bits select a new region if bit-4 is set.
@@ -65,7 +65,7 @@ pub struct MpuRegisters {
     /// [3:0]     | REGION  | {W} (see VALID) ; {R} return region_number reg
     /// ```
     pub rbar: ReadWrite<u32, RegionBaseAddress::Register>,
-    
+
     /// Defines the region size and memory attributes of the selected MPU
     /// region. The bits are defined as in 4.5.5 of the Cortex-M4 user guide:
     ///
@@ -180,7 +180,7 @@ impl MPU {
         MPU(MPU_BASE_ADDRESS)
     }
 
-    pub fn allocate_region(region: &Region, region_num: usize) -> Option<RegionConfig>  {
+    pub fn allocate_region(region: &Region, region_num: usize) -> Option<RegionConfig> {
         let start = region.get_start();
         let len = region.get_end() - start;
         let read = region.get_read_permission();
@@ -191,14 +191,17 @@ impl MPU {
 
         // Empty region
         if len == 0 {
-            let base_address = RegionBaseAddress::VALID::UseRBAR + 
-                               RegionBaseAddress::REGION.val(region_value);
+            let base_address =
+                RegionBaseAddress::VALID::UseRBAR + RegionBaseAddress::REGION.val(region_value);
 
             let attributes = RegionAttributes::ENABLE.val(0);
 
-            let config = RegionConfig { base_address, attributes };
+            let config = RegionConfig {
+                base_address,
+                attributes,
+            };
 
-            return Some(config)
+            return Some(config);
         }
         // Convert execute permission to a bitfield
         let execute_value = match execute {
@@ -257,16 +260,19 @@ impl MPU {
             let address_value = (start >> 5) as u32;
             let region_len_value = exponent - 1;
 
-            let base_address = RegionBaseAddress::ADDR.val(address_value) + 
-                               RegionBaseAddress::VALID::UseRBAR + 
-                               RegionBaseAddress::REGION.val(region_value);
+            let base_address = RegionBaseAddress::ADDR.val(address_value)
+                + RegionBaseAddress::VALID::UseRBAR
+                + RegionBaseAddress::REGION.val(region_value);
 
-            let attributes = RegionAttributes::ENABLE::SET + 
-                             RegionAttributes::SIZE.val(region_len_value) + 
-                             access_value +
-                             execute_value;
+            let attributes = RegionAttributes::ENABLE::SET
+                + RegionAttributes::SIZE.val(region_len_value)
+                + access_value
+                + execute_value;
 
-            let config = RegionConfig { base_address, attributes };
+            let config = RegionConfig {
+                base_address,
+                attributes,
+            };
 
             return Some(config);
         }
@@ -344,17 +350,20 @@ impl MPU {
             let address_value = (region_start >> 5) as u32;
             let region_len_value = exponent - 1;
 
-            let base_address = RegionBaseAddress::ADDR.val(address_value) +
-                               RegionBaseAddress::VALID::UseRBAR +
-                               RegionBaseAddress::REGION.val(region_value);
+            let base_address = RegionBaseAddress::ADDR.val(address_value)
+                + RegionBaseAddress::VALID::UseRBAR
+                + RegionBaseAddress::REGION.val(region_value);
 
-            let attributes = RegionAttributes::ENABLE::SET +
-                             RegionAttributes::SRD.val(subregion_mask) +
-                             RegionAttributes::SIZE.val(region_len_value) +
-                             access_value +
-                             execute_value;
+            let attributes = RegionAttributes::ENABLE::SET
+                + RegionAttributes::SRD.val(subregion_mask)
+                + RegionAttributes::SIZE.val(region_len_value)
+                + access_value
+                + execute_value;
 
-            let config = RegionConfig { base_address, attributes };
+            let config = RegionConfig {
+                base_address,
+                attributes,
+            };
             Some(config)
         }
     }
@@ -374,9 +383,8 @@ impl kernel::mpu::MPU for MPU {
 
         // Enable the MPU, disable it during HardFault/NMI handlers, and allow
         // privileged code access to all unprotected memory.
-        regs.ctrl.write(Control::ENABLE::SET + 
-                        Control::HFNMIENA::CLEAR + 
-                        Control::PRIVDEFENA::SET);
+        regs.ctrl
+            .write(Control::ENABLE::SET + Control::HFNMIENA::CLEAR + Control::PRIVDEFENA::SET);
     }
 
     fn disable_mpu(&self) {
@@ -388,11 +396,9 @@ impl kernel::mpu::MPU for MPU {
         let regs = &*self.0;
         regs.mpu_type.read(Type::DREGION)
     }
-    
-    fn allocate_regions(
-        regions: &mut [Region],
-    ) -> Result<Self::MpuConfig, usize> {
-        let mut configs = [None; 8]; 
+
+    fn allocate_regions(regions: &mut [Region]) -> Result<Self::MpuConfig, usize> {
+        let mut configs = [None; 8];
 
         for (i, region) in regions.iter().enumerate() {
             // Only have 8 regions
@@ -401,7 +407,9 @@ impl kernel::mpu::MPU for MPU {
             }
             configs[i] = match MPU::allocate_region(region, i) {
                 Some(config) => Some(config),
-                None => { return Err(i); },
+                None => {
+                    return Err(i);
+                }
             };
         }
 
@@ -414,7 +422,7 @@ impl kernel::mpu::MPU for MPU {
         for elem in config {
             if let Some(region_config) = elem {
                 regs.rbar.write(region_config.base_address);
-                regs.rasr.write(region_config.attributes);    
+                regs.rasr.write(region_config.attributes);
             }
         }
     }

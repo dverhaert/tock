@@ -509,7 +509,7 @@ impl Process<'a> {
         let mut regions = [mpu::Region::empty(); 8];
 
         // TODO: don't do this region computation here, store in Process
-        
+
         let flash_start = self.flash.as_ptr() as usize;
         let flash_end = flash_start + self.flash.len();
 
@@ -525,7 +525,7 @@ impl Process<'a> {
         );
 
         regions[0] = flash_region;
-        
+
         let memory_start = self.memory.as_ptr() as usize;
         let memory_end = memory_start + self.memory.len();
 
@@ -586,10 +586,9 @@ impl Process<'a> {
                     mpu::Permission::Full,
                     mpu::Permission::Full,
                 );
-                
+
                 regions[i + 3] = ipc_region;
             }
-
         }
 
         // TODO
