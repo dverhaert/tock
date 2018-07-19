@@ -2,7 +2,7 @@
 
 use kernel;
 use kernel::common::math::PowerOfTwo;
-use kernel::common::regs::{ReadOnly, ReadWrite, FieldValue};
+use kernel::common::registers::{ReadOnly, ReadWrite, FieldValue};
 use kernel::common::StaticRef;
 use kernel::mpu::{Region, Permission, Boundary};
 
