@@ -106,7 +106,7 @@ pub trait MPU {
     fn disable_mpu(&self);
 
     /// Returns the number of supported MPU regions.
-    fn num_supported_regions(&self) -> u32;
+    fn number_supported_regions(&self) -> u32;
 
     /// Allocates a set of logical regions in the MPU.
     ///
@@ -136,7 +136,7 @@ impl MPU for () {
 
     fn disable_mpu(&self) {}
 
-    fn num_supported_regions(&self) -> u32 {
+    fn number_supported_regions(&self) -> u32 {
         8
     }
 

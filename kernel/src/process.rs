@@ -499,7 +499,7 @@ impl Process<'a> {
     }
 
     crate fn setup_mpu<MPU: mpu::MPU>(&self, mpu: &MPU) {
-        let num_regions = mpu.num_supported_regions();
+        let num_regions = mpu.number_supported_regions();
 
         // TODO
         if num_regions != 8 {

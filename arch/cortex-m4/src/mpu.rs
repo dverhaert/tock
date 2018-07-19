@@ -392,7 +392,7 @@ impl kernel::mpu::MPU for MPU {
         regs.ctrl.write(Control::ENABLE::CLEAR);
     }
 
-    fn num_supported_regions(&self) -> u32 {
+    fn number_supported_regions(&self) -> u32 {
         let regs = &*self.0;
         regs.mpu_type.read(Type::DREGION)
     }
