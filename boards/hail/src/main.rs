@@ -200,6 +200,8 @@ pub unsafe fn reset_handler() {
 
     let mut chip = sam4l::chip::Sam4l::new();
 
+    // Initialize USART0 for Uart
+    sam4l::usart::USART0.set_mode(sam4l::usart::UsartMode::Uart);
     let console = static_init!(
         capsules::console::Console<sam4l::usart::USART>,
         capsules::console::Console::new(
@@ -212,12 +214,15 @@ pub unsafe fn reset_handler() {
     );
     hil::uart::UART::set_client(&sam4l::usart::USART0, console);
 
+    // Initialize USART3 for Uart
+    sam4l::usart::USART3.set_mode(sam4l::usart::UsartMode::Uart);
     // Create the Nrf51822Serialization driver for passing BLE commands
     // over UART to the nRF51822 radio.
     let nrf_serialization = static_init!(
         capsules::nrf51822_serialization::Nrf51822Serialization<sam4l::usart::USART>,
         capsules::nrf51822_serialization::Nrf51822Serialization::new(
             &sam4l::usart::USART3,
+            &sam4l::gpio::PA[17],
             &mut capsules::nrf51822_serialization::WRITE_BUF,
             &mut capsules::nrf51822_serialization::READ_BUF
         )
@@ -466,21 +471,13 @@ pub unsafe fn reset_handler() {
         dac: dac,
     };
 
-    // Need to reset the nRF on boot
-    sam4l::gpio::PA[17].enable();
-    sam4l::gpio::PA[17].enable_output();
-    sam4l::gpio::PA[17].clear();
-    // minimum hold time is 200ns, ~20ns per instruction, so overshoot a bit
-    for _ in 0..10 {
-        cortexm4::support::nop();
-    }
-    sam4l::gpio::PA[17].set();
-
     hail.console.initialize();
     // Attach the kernel debug interface to this console
     let kc = static_init!(capsules::console::App, capsules::console::App::default());
     kernel::debug::assign_console_driver(Some(hail.console), kc);
 
+    // Reset the nRF and setup the UART bus.
+    hail.nrf51822.reset();
     hail.nrf51822.initialize();
 
     // Uncomment to measure overheads for TakeCell and MapCell:

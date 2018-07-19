@@ -42,6 +42,7 @@ use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
 /// Syscall driver number.
 pub const DRIVER_NUM: usize = 0x00000001;
 
+#[derive(Default)]
 pub struct App {
     write_callback: Option<Callback>,
     write_buffer: Option<AppSlice<Shared, u8>>,
@@ -52,22 +53,6 @@ pub struct App {
     read_callback: Option<Callback>,
     read_buffer: Option<AppSlice<Shared, u8>>,
     read_len: usize,
-}
-
-impl Default for App {
-    fn default() -> App {
-        App {
-            write_callback: None,
-            write_buffer: None,
-            write_len: 0,
-            write_remaining: 0,
-            pending_write: false,
-
-            read_callback: None,
-            read_buffer: None,
-            read_len: 0,
-        }
-    }
 }
 
 pub static mut WRITE_BUF: [u8; 64] = [0; 64];
@@ -103,7 +88,7 @@ impl<U: UART> Console<'a, U> {
     }
 
     pub fn initialize(&self) {
-        self.uart.init(uart::UARTParams {
+        self.uart.configure(uart::UARTParameters {
             baud_rate: self.baud_rate,
             stop_bits: uart::StopBits::One,
             parity: uart::Parity::None,
