@@ -12,7 +12,8 @@ pub enum Permission {
 #[derive(Copy, Clone)]
 pub enum Boundary {
     Fixed,
-    FlexibleWithBound(usize),
+    Flexible(usize),
+    Relative(usize),
 }
 
 #[derive(Copy, Clone)]
