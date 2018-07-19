@@ -505,10 +505,6 @@ impl Process<'a> {
 
         let mut regions = [mpu::Region::empty(); 8];
 
-        // TODO: Eventually we won't do this region computation every
-        // context switch, but rather cache the resulting the MPU config data
-        // in Process for use here
-
         let flash_start = self.flash.as_ptr() as usize;
         let flash_end = flash_start + self.flash.len();
 
@@ -593,9 +589,15 @@ impl Process<'a> {
                 regions[i + 3] = ipc_region;
             }
         }
+        
+        // TODO: Eventually we won't do this region computation every
+        // context switch, but rather cache the resulting the MPU config data
+        // in Process for use here
 
-        // TODO
-        let config = MPU::allocate_regions(&mut regions).unwrap();
+        let config = match MPU::allocate_regions(&mut regions) {
+            Ok(config) => config,
+            Err(index) => panic!("Unable to allocate MPU region at index {}.", index)
+        };
 
         // Set MPU regions
         mpu.configure_mpu(&config);
