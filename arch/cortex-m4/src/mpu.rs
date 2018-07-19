@@ -181,8 +181,8 @@ impl MPU {
     }
 
     pub fn allocate_region(region: &Region, region_num: usize) -> Option<RegionConfig> {
-        let start = region.get_start();
-        let len = region.get_end() - start;
+        let start = region.get_start_address();
+        let len = region.get_end_address() - start;
         let read = region.get_read_permission();
         let write = region.get_write_permission();
         let execute = region.get_execute_permission();

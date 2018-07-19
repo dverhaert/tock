@@ -18,8 +18,8 @@ pub enum Boundary {
 
 #[derive(Copy, Clone)]
 pub struct Region {
-    start: usize,
-    end: usize,
+    start_address: usize,
+    end_address: usize,
     start_boundary: Boundary,
     end_boundary: Boundary,
     read: Permission,
@@ -29,8 +29,8 @@ pub struct Region {
 
 impl Region {
     pub fn new(
-        start: usize,
-        end: usize,
+        start_address: usize,
+        end_address: usize,
         start_boundary: Boundary,
         end_boundary: Boundary,
         read: Permission,
@@ -38,20 +38,20 @@ impl Region {
         execute: Permission,
     ) -> Region {
         Region {
-            start: start,
-            end: end,
-            start_boundary: start_boundary,
-            end_boundary: end_boundary,
-            read: read,
-            write: write,
-            execute: execute,
+            start_address,
+            end_address,
+            start_boundary,
+            end_boundary,
+            read,
+            write,
+            execute,
         }
     }
 
     pub fn empty() -> Region {
         Region {
-            start: 0,
-            end: 0,
+            start_address: 0,
+            end_address: 0,
             start_boundary: Boundary::Fixed,
             end_boundary: Boundary::Fixed,
             read: Permission::NoAccess,
@@ -60,12 +60,12 @@ impl Region {
         }
     }
 
-    pub fn get_start(&self) -> usize {
-        self.start
+    pub fn get_start_address(&self) -> usize {
+        self.start_address
     }
 
-    pub fn get_end(&self) -> usize {
-        self.end
+    pub fn get_end_address(&self) -> usize {
+        self.end_address
     }
 
     pub fn get_start_boundary(&self) -> Boundary {
@@ -88,12 +88,12 @@ impl Region {
         self.execute
     }
 
-    pub fn set_start(&mut self, start: usize) {
-        self.start = start;
+    pub fn set_start_address(&mut self, start_address: usize) {
+        self.start_address = start_address;
     }
 
-    pub fn set_end(&mut self, end: usize) {
-        self.end = end;
+    pub fn set_end_address(&mut self, end_address: usize) {
+        self.end_address = end_address;
     }
 }
 

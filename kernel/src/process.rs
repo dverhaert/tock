@@ -499,16 +499,15 @@ impl Process<'a> {
     }
 
     crate fn setup_mpu<MPU: mpu::MPU>(&self, mpu: &MPU) {
-        let num_regions = mpu.number_supported_regions();
-
-        // TODO
-        if num_regions != 8 {
-            //panic!("Currently Tock assumes 8 regions");
+        if mpu.number_supported_regions() != 8 {
+            panic!("Currently Tock assumes 8 regions");
         }
 
         let mut regions = [mpu::Region::empty(); 8];
 
-        // TODO: don't do this region computation here, store in Process
+        // TODO: Eventually we won't do this region computation every
+        // context switch, but rather cache the resulting the MPU config data
+        // in Process for use here
 
         let flash_start = self.flash.as_ptr() as usize;
         let flash_end = flash_start + self.flash.len();
@@ -541,6 +540,10 @@ impl Process<'a> {
         );
 
         regions[1] = memory_region;
+        
+        // TODO: Pass in a flexible start boundary and let the MPU 
+        // do this calculation if it needs to (i.e. if happens to 
+        // be the Cortex-M4)
 
         let grant_len = unsafe {
             math::PowerOfTwo::ceiling(
