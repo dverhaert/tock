@@ -503,17 +503,19 @@ impl Process<'a> {
             panic!("Currently Tock assumes 8 regions");
         }
 
-        let mut regions = [mpu::Region::empty(); 8];
+        let mut regions: [mpu::Region; 8] = [Default::default(); 8];
 
         let flash_start = self.flash.as_ptr() as usize;
         let flash_end = flash_start + self.flash.len();
 
         // Flash region
         let flash_region = mpu::Region::new(
-            flash_start,
-            flash_end,
-            mpu::Boundary::Fixed,
-            mpu::Boundary::Fixed,
+            mpu::Location::Absolute {
+                start_address: flash_start,
+                start_flexibility: 0,
+                end_address: flash_end,
+                end_flexibility: 0,
+            },
             mpu::Permission::Full,
             mpu::Permission::NoAccess,
             mpu::Permission::Full,
@@ -526,10 +528,12 @@ impl Process<'a> {
 
         // Memory region
         let memory_region = mpu::Region::new(
-            memory_start,
-            memory_end,
-            mpu::Boundary::Fixed,
-            mpu::Boundary::Fixed,
+            mpu::Location::Absolute {
+                start_address: memory_start,
+                start_flexibility: 0,
+                end_address: memory_end,
+                end_flexibility: 0,
+            },
             mpu::Permission::Full,
             mpu::Permission::Full,
             mpu::Permission::Full,
@@ -559,10 +563,12 @@ impl Process<'a> {
 
         // Grant region
         let grant_region = mpu::Region::new(
-            grant_start,
-            grant_end,
-            mpu::Boundary::Fixed,
-            mpu::Boundary::Fixed,
+            mpu::Location::Absolute {
+                start_address: grant_start,
+                start_flexibility: 0,
+                end_address: grant_end,
+                end_flexibility: 0,
+            },
             mpu::Permission::PrivilegedOnly,
             mpu::Permission::PrivilegedOnly,
             mpu::Permission::NoAccess,
@@ -570,23 +576,28 @@ impl Process<'a> {
 
         regions[2] = grant_region;
 
+        let mut num_regions = 3;
+
         // IPC regions
-        for (i, region) in self.mpu_regions.iter().enumerate() {
+        for region in self.mpu_regions.iter() {
             if !region.get().0.is_null() {
                 let ipc_start = region.get().0 as usize;
                 let ipc_end = ipc_start + region.get().1.as_num::<u32>() as usize;
 
                 let ipc_region = mpu::Region::new(
-                    ipc_start,
-                    ipc_end,
-                    mpu::Boundary::Fixed,
-                    mpu::Boundary::Fixed,
+                    mpu::Location::Absolute {
+                        start_address: ipc_start,
+                        start_flexibility: 0,
+                        end_address: ipc_end,
+                        end_flexibility: 0,
+                    },
                     mpu::Permission::Full,
                     mpu::Permission::Full,
                     mpu::Permission::Full,
                 );
 
-                regions[i + 3] = ipc_region;
+                regions[num_regions] = ipc_region;
+                num_regions += 1; 
             }
         }
         
@@ -594,7 +605,7 @@ impl Process<'a> {
         // context switch, but rather cache the resulting the MPU config data
         // in Process for use here
 
-        let config = match MPU::allocate_regions(&mut regions) {
+        let config = match MPU::allocate_regions(&mut regions[..num_regions]) {
             Ok(config) => config,
             Err(index) => panic!("Unable to allocate MPU region at index {}.", index)
         };

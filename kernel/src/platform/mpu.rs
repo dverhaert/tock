@@ -10,18 +10,22 @@ pub enum Permission {
 }
 
 #[derive(Copy, Clone)]
-pub enum Boundary {
-    Fixed,
-    Flexible(usize),
-    Relative(usize),
+pub enum Location {
+    Absolute { 
+        start_address: usize, 
+        start_flexibility: usize,
+        end_address: usize,
+        end_flexibility: usize,
+    },
+    Relative {
+        offset: usize, 
+        length: usize,
+    }
 }
 
 #[derive(Copy, Clone)]
 pub struct Region {
-    start_address: usize,
-    end_address: usize,
-    start_boundary: Boundary,
-    end_boundary: Boundary,
+    location: Location,
     read: Permission,
     write: Permission,
     execute: Permission,
@@ -29,51 +33,21 @@ pub struct Region {
 
 impl Region {
     pub fn new(
-        start_address: usize,
-        end_address: usize,
-        start_boundary: Boundary,
-        end_boundary: Boundary,
+        location: Location,
         read: Permission,
         write: Permission,
         execute: Permission,
     ) -> Region {
         Region {
-            start_address,
-            end_address,
-            start_boundary,
-            end_boundary,
-            read,
-            write,
-            execute,
+            location: location,
+            read: read,
+            write: write,
+            execute: execute,
         }
     }
 
-    pub fn empty() -> Region {
-        Region {
-            start_address: 0,
-            end_address: 0,
-            start_boundary: Boundary::Fixed,
-            end_boundary: Boundary::Fixed,
-            read: Permission::NoAccess,
-            write: Permission::NoAccess,
-            execute: Permission::NoAccess,
-        }
-    }
-
-    pub fn get_start_address(&self) -> usize {
-        self.start_address
-    }
-
-    pub fn get_end_address(&self) -> usize {
-        self.end_address
-    }
-
-    pub fn get_start_boundary(&self) -> Boundary {
-        self.start_boundary
-    }
-
-    pub fn get_end_boundary(&self) -> Boundary {
-        self.end_boundary
+    pub fn get_location(&self) -> Location {
+        self.location
     }
 
     pub fn get_read_permission(&self) -> Permission {
@@ -88,12 +62,24 @@ impl Region {
         self.execute
     }
 
-    pub fn set_start_address(&mut self, start_address: usize) {
-        self.start_address = start_address;
+    pub fn set_location(&mut self, location: Location) {
+        self.location = location;
     }
+}
 
-    pub fn set_end_address(&mut self, end_address: usize) {
-        self.end_address = end_address;
+impl Default for Region {
+    fn default() -> Region {
+        Region {
+            location: Location::Absolute { 
+                start_address: 0,
+                start_flexibility: 0,
+                end_address: 0,
+                end_flexibility: 0,
+            },
+            read: Permission::NoAccess,
+            write: Permission::NoAccess,
+            execute: Permission::NoAccess,
+        }
     }
 }
 

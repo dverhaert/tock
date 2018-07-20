@@ -4,7 +4,7 @@ use kernel;
 use kernel::common::math::PowerOfTwo;
 use kernel::common::registers::{FieldValue, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
-use kernel::mpu::{Boundary, Permission, Region};
+use kernel::mpu::{Location, Permission, Region};
 
 #[repr(C)]
 /// MPU Registers for the Cortex-M4 family
@@ -238,20 +238,34 @@ impl kernel::mpu::MPU for MPU {
             if i >= 8 {
                 break;
             }
+
+            // TODO: handle flexible start and end and relative locations
+            let (start, end) = match region.get_location() {
+                Location::Absolute { 
+                    start_address,
+                    start_flexibility,
+                    end_address,
+                    end_flexibility,
+                } => {
+                    if start_flexibility == 0 && end_flexibility == 0{
+                        (start_address, end_address)
+                    } else {
+                        unimplemented!("Flexible start and end unimplemented.");
+                    }
+                },
+                Location::Relative {
+                    offset: _,
+                    length: _,
+                } => {
+                    unimplemented!("Relative location unimplemented.");
+                }
+            };
             
-            let start = region.get_start_address();
-            let len = region.get_end_address() - start;
-            let _start_boundary = region.get_start_boundary();
-            let _end_boundary = region.get_end_boundary();
+            let len = end - start;
             let read = region.get_read_permission();
             let write = region.get_write_permission();
             let execute = region.get_execute_permission();
             let region_num = i as u32;
-
-            // Empty region
-            if len == 0 {
-                continue;
-            }
 
             // Convert execute permission to a bitfield
             let execute_value = match execute {
