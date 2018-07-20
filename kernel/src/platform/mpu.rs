@@ -113,7 +113,7 @@ pub trait MPU {
     ///
     /// # Arguments
     ///
-    /// `regions`   : an array of disjoint logical regions.
+    /// `regions`: an array of disjoint logical regions.
     ///
     /// # Return Value
     ///
