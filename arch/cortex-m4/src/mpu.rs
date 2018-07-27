@@ -17,74 +17,20 @@ pub struct MpuRegisters {
     pub mpu_type: ReadOnly<u32, Type::Register>,
 
     /// The control register:
-    ///
     ///   * Enables the MPU (bit 0).
-    ///   * Enables MPU in hard-fault, non-maskable interrupt (NMI) and
-    ///     FAULTMASK escalated handlers (bit 1).
-    ///   * Enables the default memory map background region in privileged mode
-    ///     (bit 2).
-    ///
-    /// ```text
-    /// Bit   | Name       | Function
-    /// ----- | ---------- | -----------------------------
-    /// 0     | ENABLE     | Enable the MPU (1=enabled)
-    /// 1     | HFNMIENA   | 0=MPU disabled during HardFault, NMI, and FAULTMASK
-    ///       |            | regardless of bit 0. 1 leaves enabled.
-    /// 2     | PRIVDEFENA | 0=Any memory access not explicitly enabled causes fault
-    ///       |            | 1=Privledged mode code can read any memory address
-    /// ```
+    ///   * Enables MPU in hard-fault, non-maskable interrupt (NMI).
+    ///   * Enables the default memory map background region in privileged mode.
     pub ctrl: ReadWrite<u32, Control::Register>,
 
     /// Selects the region number (zero-indexed) referenced by the region base
     /// address and region attribute and size registers.
-    ///
-    /// ```text
-    /// Bit   | Name     | Function
-    /// ----- | -------- | -----------------------------
-    /// [7:0] | REGION   | Region for writes to MPU_RBAR or MPU_RASR. Range 0-7.
-    /// ```
     pub rnr: ReadWrite<u32, RegionNumber::Register>,
 
     /// Defines the base address of the currently selected MPU region.
-    ///
-    /// When writing, the first 3 bits select a new region if bit-4 is set.
-    ///
-    /// The top bits set the base address of the register, with the bottom 32-N
-    /// bits masked based on the region size (set in the region attribute and
-    /// size register) according to:
-    ///
-    ///   N = Log2(Region size in bytes)
-    ///
-    /// ```text
-    /// Bit       | Name    | Function
-    /// --------- | ------- | -----------------------------
-    /// [31:N]    | ADDR    | Region base address
-    /// [(N-1):5] |         | Reserved
-    /// [4]       | VALID   | {RZ} 0=Use region_number reg, 1=Use REGION
-    ///           |         |      Update base address for chosen region
-    /// [3:0]     | REGION  | {W} (see VALID) ; {R} return region_number reg
-    /// ```
     pub rbar: ReadWrite<u32, RegionBaseAddress::Register>,
 
     /// Defines the region size and memory attributes of the selected MPU
-    /// region. The bits are defined as in 4.5.5 of the Cortex-M4 user guide:
-    ///
-    /// ```text
-    /// Bit   | Name   | Function
-    /// ----- | ------ | -----------------------------
-    /// 0     | ENABLE | Region enable
-    /// 5:1   | SIZE   | Region size is 2^(SIZE+1) (minimum 3)
-    /// 7:6   |        | Unused
-    /// 15:8  | SRD    | Subregion disable bits (0 is enable, 1 is disable)
-    /// 16    | B      | Memory access attribute
-    /// 17    | C      | Memory access attribute
-    /// 18    | S      | Shareable
-    /// 21:19 | TEX    | Memory access attribute
-    /// 23:22 |        | Unused
-    /// 26:24 | AP     | Access permission field
-    /// 27    |        | Unused
-    /// 28    | XN     | Instruction access disable
-    /// ```
+    /// region. The bits are defined as in 4.5.5 of the Cortex-M4 user guide.
     pub rasr: ReadWrite<u32, RegionAttributes::Register>,
 }
 
@@ -190,7 +136,7 @@ pub struct RegionConfig {
 impl RegionConfig {
     fn empty(region_num: u32) -> RegionConfig {
         let base_address = RegionBaseAddress::VALID::UseRBAR + RegionBaseAddress::REGION.val(region_num);
-        let attributes = RegionAttributes::ENABLE.val(0);
+        let attributes = RegionAttributes::ENABLE::CLEAR;
 
         RegionConfig {
             base_address: base_address,
@@ -216,9 +162,9 @@ impl kernel::mpu::MPU for MPU {
         regs.ctrl.write(Control::ENABLE::CLEAR);
     }
 
-    fn number_supported_regions(&self) -> u32 {
+    fn number_supported_regions(&self) -> usize {
         let regs = &*self.0;
-        regs.mpu_type.read(Type::DREGION)
+        regs.mpu_type.read(Type::DREGION) as usize
     }
 
     fn allocate_regions(regions: &mut [Region]) -> Result<Self::MpuConfig, usize> {
