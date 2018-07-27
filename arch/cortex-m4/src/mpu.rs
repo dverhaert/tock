@@ -193,8 +193,15 @@ impl kernel::mpu::MPU for MPU {
                     end_address,
                     end_flexibility,
                 } => {
-                    if start_flexibility == 0 && end_flexibility == 0{
+                    if start_flexibility == 0 && end_flexibility == 0 {
                         (start_address, end_address)
+                    } else if start_flexibility != 0 && end_flexibility == 0 {
+                        // let lenCeil = math::PowerOfTwo::ceiling(len);
+                        // let flexlenCeil = math::PowerOfTwo::ceiling(len + start_flexibility);
+                        // let lenFloor =  math::PowerOfTwo::floor(len);
+                        unimplemented!("Flexible start and end unimplemented."); 
+                    } else if start_flexibility == 0 && end_flexibility != 0 { 
+                        unimplemented!("Flexible start and end unimplemented.");  
                     } else {
                         unimplemented!("Flexible start and end unimplemented.");
                     }
