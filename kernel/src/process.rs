@@ -621,6 +621,11 @@ impl Process<'a> {
                     (grant_ptrs_offset + callbacks_offset + process_struct_offset) as u32;
             }
 
+            debug!("grant_ptrs_offset = {}", grant_ptrs_offset);
+            debug!("callbacks_offset = {}", callbacks_offset);
+            debug!("process_struct_offset = {}", process_struct_offset);
+            debug!("min_app_ram_size = {}", min_app_ram_size);
+
             // TODO round app_ram_size up to a closer MPU unit.
             // This is a very conservative approach that rounds up to power of
             // two. We should be able to make this closer to what we actually need.

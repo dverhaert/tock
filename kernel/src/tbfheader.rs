@@ -181,6 +181,9 @@ impl TbfHeader {
                 let heap_len = align8!(hd.min_app_heap_len) + align8!(hd.min_kernel_heap_len);
                 let data_len = hd.data_size + hd.got_size + hd.bss_size;
                 let stack_size = align8!(hd.min_stack_len);
+                // debug!("heap_len = {}", heap_len);
+                // debug!("data_len = {}", data_len);
+                // debug!("stack_size = {}", stack_size);
                 align8!(data_len + stack_size) + heap_len
             }
             TbfHeader::TbfHeaderV2(hd) => hd.main.map_or(0, |m| m.minimum_ram_size),
