@@ -510,11 +510,9 @@ impl Process<'a> {
 
         // Flash region
         let flash_region = mpu::Region::new(
-            mpu::Location::Absolute {
+            mpu::RegionType::Fixed {
                 start_address: flash_start,
-                start_flexibility: 0,
                 end_address: flash_end,
-                end_flexibility: 0,
             },
             mpu::Permission::Full,
             mpu::Permission::NoAccess,
@@ -528,11 +526,9 @@ impl Process<'a> {
 
         // Memory region
         let memory_region = mpu::Region::new(
-            mpu::Location::Absolute {
+            mpu::RegionType::Fixed {
                 start_address: memory_start,
-                start_flexibility: 0,
                 end_address: memory_end,
-                end_flexibility: 0,
             },
             mpu::Permission::Full,
             mpu::Permission::Full,
@@ -563,11 +559,9 @@ impl Process<'a> {
 
         // Grant region
         let grant_region = mpu::Region::new(
-            mpu::Location::Absolute {
+            mpu::RegionType::Fixed {
                 start_address: grant_start,
-                start_flexibility: 0,
                 end_address: grant_end,
-                end_flexibility: 0,
             },
             mpu::Permission::PrivilegedOnly,
             mpu::Permission::PrivilegedOnly,
@@ -585,11 +579,9 @@ impl Process<'a> {
                 let ipc_end = ipc_start + region.get().1.as_num::<u32>() as usize;
 
                 let ipc_region = mpu::Region::new(
-                    mpu::Location::Absolute {
+                    mpu::RegionType::Fixed {
                         start_address: ipc_start,
-                        start_flexibility: 0,
                         end_address: ipc_end,
-                        end_flexibility: 0,
                     },
                     mpu::Permission::Full,
                     mpu::Permission::Full,

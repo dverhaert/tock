@@ -4,7 +4,7 @@ use kernel;
 use kernel::common::math::PowerOfTwo;
 use kernel::common::registers::{FieldValue, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
-use kernel::mpu::{Location, Permission, Region};
+use kernel::mpu::{Permission, Region, RegionType};
 
 #[repr(C)]
 /// MPU Registers for the Cortex-M4 family
@@ -240,24 +240,13 @@ impl kernel::mpu::MPU for MPU {
             }
 
             // TODO: handle flexible start and end and relative locations
-            let (start, end) = match region.get_location() {
-                Location::Absolute { 
+            let (start, end) = match region.get_type() {
+                RegionType::Fixed { 
                     start_address,
-                    start_flexibility,
                     end_address,
-                    end_flexibility,
-                } => {
-                    if start_flexibility == 0 && end_flexibility == 0{
-                        (start_address, end_address)
-                    } else {
-                        unimplemented!("Flexible start and end unimplemented.");
-                    }
-                },
-                Location::Relative {
-                    offset: _,
-                    length: _,
-                } => {
-                    unimplemented!("Relative location unimplemented.");
+                } => (start_address, end_address),
+                _ => {
+                    unimplemented!("LeftGrowing, RightGrowing, and Packed unimplemented.");
                 }
             };
             

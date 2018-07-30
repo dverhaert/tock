@@ -10,22 +10,37 @@ pub enum Permission {
 }
 
 #[derive(Copy, Clone)]
-pub enum Location {
-    Absolute { 
+pub enum RegionType {
+    /// Fixed region
+    Fixed { 
         start_address: usize, 
+        end_address: usize,
+    },
+
+    /// End fixed, start can be lower
+    LeftGrowing {
+        start_address: usize,
         start_flexibility: usize,
+        end_address: usize,
+    },
+
+    /// Start fixed, end can be higher 
+    RightGrowing {
+        start_address: usize,
         end_address: usize,
         end_flexibility: usize,
     },
-    Relative {
-        offset: usize, 
+
+    /// Put as close to end of previous region as possible,
+    /// make the length at least `length`, and as small as possible
+    Packed {
         length: usize,
     }
 }
 
 #[derive(Copy, Clone)]
 pub struct Region {
-    location: Location,
+    region_type: RegionType,
     read: Permission,
     write: Permission,
     execute: Permission,
@@ -33,21 +48,21 @@ pub struct Region {
 
 impl Region {
     pub fn new(
-        location: Location,
+        region_type: RegionType,
         read: Permission,
         write: Permission,
         execute: Permission,
     ) -> Region {
         Region {
-            location: location,
+            region_type: region_type,
             read: read,
             write: write,
             execute: execute,
         }
     }
 
-    pub fn get_location(&self) -> Location {
-        self.location
+    pub fn get_type(&self) -> RegionType {
+        self.region_type
     }
 
     pub fn get_read_permission(&self) -> Permission {
@@ -62,19 +77,17 @@ impl Region {
         self.execute
     }
 
-    pub fn set_location(&mut self, location: Location) {
-        self.location = location;
+    pub fn set_type(&mut self, region_type: RegionType) {
+        self.region_type = region_type;
     }
 }
 
 impl Default for Region {
     fn default() -> Region {
         Region {
-            location: Location::Absolute { 
+            region_type: RegionType::Fixed { 
                 start_address: 0,
-                start_flexibility: 0,
                 end_address: 0,
-                end_flexibility: 0,
             },
             read: Permission::NoAccess,
             write: Permission::NoAccess,
