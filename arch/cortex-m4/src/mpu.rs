@@ -233,28 +233,19 @@ impl kernel::mpu::MPU for MPU {
             RegionConfig::empty(7),
         ];
 
+        let curr_regions: [(usize, usize); 8] = [(0, 0); 8];
+
         for (i, region) in regions.iter().enumerate() {
             // Only support 8 regions
             if i >= 8 {
                 break;
             }
-
-            // TODO: handle flexible start and end and relative locations
-            let (start, end) = match region.get_type() {
-                RegionType::Fixed { 
-                    start_address,
-                    end_address,
-                } => (start_address, end_address),
-                _ => {
-                    unimplemented!("LeftGrowing, RightGrowing, and Packed unimplemented.");
-                }
-            };
             
-            let len = end - start;
+            let region_num = i as u32;
+            
             let read = region.get_read_permission();
             let write = region.get_write_permission();
             let execute = region.get_execute_permission();
-            let region_num = i as u32;
 
             // Convert execute permission to a bitfield
             let execute_value = match execute {
@@ -283,6 +274,19 @@ impl kernel::mpu::MPU for MPU {
                     Permission::Full => RegionAttributes::AP::ReadWrite,
                 },
             };
+            
+            // TODO: handle flexible start and end and relative locations
+            let (start, end) = match region.get_type() {
+                RegionType::Fixed { 
+                    start_address,
+                    end_address,
+                } => (start_address, end_address),
+                _ => {
+                    unimplemented!("LeftGrowing, RightGrowing, and Packed unimplemented.");
+                }
+            };
+            
+            let len = end - start;
 
             // There are two possibilities we support:
             //
