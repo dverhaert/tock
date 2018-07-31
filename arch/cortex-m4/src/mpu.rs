@@ -162,9 +162,9 @@ impl kernel::mpu::MPU for MPU {
         regs.ctrl.write(Control::ENABLE::CLEAR);
     }
 
-    fn number_supported_regions(&self) -> usize {
+    fn number_supported_regions(&self) -> u32 {
         let regs = &*self.0;
-        regs.mpu_type.read(Type::DREGION) as usize
+        regs.mpu_type.read(Type::DREGION)
     }
 
     fn allocate_regions(regions: &mut [Region]) -> Result<Self::MpuConfig, usize> {
