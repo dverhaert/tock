@@ -514,9 +514,7 @@ impl Process<'a> {
                 start_address: flash_start,
                 end_address: flash_end,
             },
-            mpu::Permission::Full,
-            mpu::Permission::NoAccess,
-            mpu::Permission::Full,
+            mpu::Permissions::ReadExecuteOnly,
         );
 
         regions[0] = flash_region;
@@ -530,16 +528,12 @@ impl Process<'a> {
                 start_address: memory_start,
                 end_address: memory_end,
             },
-            mpu::Permission::Full,
-            mpu::Permission::Full,
-            mpu::Permission::Full,
+            mpu::Permissions::ReadWriteExecute,
         );
 
         regions[1] = memory_region;
         
-        // TODO: Pass in a flexible start boundary and let the MPU 
-        // do this calculation if it needs to (i.e. if happens to 
-        // be the Cortex-M4)
+        // TODO: no grant
 
         let grant_len = unsafe {
             math::PowerOfTwo::ceiling(
@@ -563,9 +557,8 @@ impl Process<'a> {
                 start_address: grant_start,
                 end_address: grant_end,
             },
-            mpu::Permission::PrivilegedOnly,
-            mpu::Permission::PrivilegedOnly,
-            mpu::Permission::NoAccess,
+            // TODO: no grant
+            mpu::Permissions::NoAccess,
         );
 
         regions[2] = grant_region;
@@ -583,9 +576,7 @@ impl Process<'a> {
                         start_address: ipc_start,
                         end_address: ipc_end,
                     },
-                    mpu::Permission::Full,
-                    mpu::Permission::Full,
-                    mpu::Permission::Full,
+                    mpu::Permissions::ReadWriteExecute,
                 );
 
                 regions[num_regions] = ipc_region;

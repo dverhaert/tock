@@ -4,7 +4,7 @@ use kernel;
 use kernel::common::math::PowerOfTwo;
 use kernel::common::registers::{FieldValue, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
-use kernel::mpu::{Permission, Region, RegionType};
+use kernel::mpu::{Permissions, Region, RegionType};
 
 #[repr(C)]
 /// MPU Registers for the Cortex-M4 family
@@ -179,56 +179,40 @@ impl kernel::mpu::MPU for MPU {
             RegionConfig::empty(7),
         ];
 
-        let curr_regions: [(usize, usize); 8] = [(0, 0); 8];
-
         for (i, region) in regions.iter().enumerate() {
             // Only support 8 regions
             if i >= 8 {
                 break;
             }
-          
+            
             let region_num = i as u32;
-            
-            let read = region.get_read_permission();
-            let write = region.get_write_permission();
-            let execute = region.get_execute_permission();
+            let permissions = region.get_permissions();
 
-            // Convert execute permission to a bitfield
-            let execute_value = match execute {
-                Permission::NoAccess => RegionAttributes::XN::Disable,
-                Permission::Full => RegionAttributes::XN::Enable,
-                _ => {
-                    return Err(i);
-                } // Not supported
+            // Determine execute permission
+            let execute_value = match permissions {
+                Permissions::ReadWriteExecute 
+                | Permissions::ReadExecuteOnly 
+                | Permissions::ExecuteOnly => RegionAttributes::XN::Enable,
+                _ => RegionAttributes::XN::Disable,
             };
 
-            // Convert read & write permissions to bitfields
-            let access_value = match read {
-                Permission::NoAccess => RegionAttributes::AP::NoAccess,
-                Permission::PrivilegedOnly => {
-                    match write {
-                        Permission::NoAccess => RegionAttributes::AP::PrivilegedOnlyReadOnly,
-                        Permission::PrivilegedOnly => RegionAttributes::AP::PrivilegedOnly,
-                        _ => {
-                            return Err(i);
-                        } // Not supported
-                    }
-                }
-                Permission::Full => match write {
-                    Permission::NoAccess => RegionAttributes::AP::ReadOnly,
-                    Permission::PrivilegedOnly => RegionAttributes::AP::UnprivilegedReadOnly,
-                    Permission::Full => RegionAttributes::AP::ReadWrite,
-                },
+            // Determine access permission
+            let access_value = match permissions {
+                Permissions::ReadWriteExecute
+                | Permissions::ReadWriteOnly => RegionAttributes::AP::ReadWrite,
+                Permissions::ReadExecuteOnly
+                | Permissions::ReadOnly => RegionAttributes::AP::ReadOnly,
+                _ => RegionAttributes::AP::NoAccess,
             };
             
-            // TODO: handle flexible start and end and relative locations
+            // TODO: handle flexible start and end and packed 
             let (start, end) = match region.get_type() {
                 RegionType::Fixed { 
                     start_address,
                     end_address,
                 } => (start_address, end_address),
                 _ => {
-                    unimplemented!("LeftGrowing, RightGrowing, and Packed unimplemented.");
+                    unimplemented!("Growable and Packed unimplemented.");
                 }
             };
             

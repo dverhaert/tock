@@ -1,12 +1,13 @@
 //! Interface for configuring the Memory Protection Unit.
 
 #[derive(Copy, Clone)]
-pub enum Permission {
-    //                 Privileged  Unprivileged
-    //                 Access      Access
-    NoAccess,       // --          --
-    PrivilegedOnly, // V           --
-    Full,           // V           V
+pub enum Permissions {
+    ReadWriteExecute,
+    ReadWriteOnly,
+    ReadExecuteOnly,
+    ReadOnly,
+    ExecuteOnly,
+    NoAccess,
 }
 
 #[derive(Copy, Clone)]
@@ -17,47 +18,36 @@ pub enum RegionType {
         end_address: usize,
     },
 
-    /// End fixed, start can be lower
-    LeftGrowing {
-        start_address: usize,
-        start_flexibility: usize,
-        end_address: usize,
-    },
-
-    /// Start fixed, end can be higher 
-    RightGrowing {
-        start_address: usize,
-        end_address: usize,
+    /// Start can be lower and end can be higher
+    Growable {
+        start: usize,
+        end: usize,
+        start_flexiblity: usize,
         end_flexibility: usize,
     },
 
-    /// Put as close to end of previous region as possible,
-    /// make the length at least `length`, and as small as possible
+    /// Start as close as possible to `start`
+    /// Make length as close as possible to `min_length`
     Packed {
-        length: usize,
+        start: usize,
+        min_length: usize,
     }
 }
 
 #[derive(Copy, Clone)]
 pub struct Region {
     region_type: RegionType,
-    read: Permission,
-    write: Permission,
-    execute: Permission,
+    permissions: Permissions,
 }
 
 impl Region {
     pub fn new(
         region_type: RegionType,
-        read: Permission,
-        write: Permission,
-        execute: Permission,
+        permissions: Permissions,
     ) -> Region {
         Region {
             region_type: region_type,
-            read: read,
-            write: write,
-            execute: execute,
+            permissions: permissions,
         }
     }
 
@@ -65,16 +55,8 @@ impl Region {
         self.region_type
     }
 
-    pub fn get_read_permission(&self) -> Permission {
-        self.read
-    }
-
-    pub fn get_write_permission(&self) -> Permission {
-        self.write
-    }
-
-    pub fn get_execute_permission(&self) -> Permission {
-        self.execute
+    pub fn get_permissions(&self) -> Permissions {
+        self.permissions
     }
 
     pub fn set_type(&mut self, region_type: RegionType) {
@@ -89,9 +71,7 @@ impl Default for Region {
                 start_address: 0,
                 end_address: 0,
             },
-            read: Permission::NoAccess,
-            write: Permission::NoAccess,
-            execute: Permission::NoAccess,
+            permissions: Permissions::NoAccess,
         }
     }
 }
