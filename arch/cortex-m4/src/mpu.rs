@@ -188,21 +188,14 @@ impl kernel::mpu::MPU for MPU {
             let region_num = i as u32;
             let permissions = region.get_permissions();
 
-            // Determine execute permission
-            let execute_value = match permissions {
-                Permissions::ReadWriteExecute 
-                | Permissions::ReadExecuteOnly 
-                | Permissions::ExecuteOnly => RegionAttributes::XN::Enable,
-                _ => RegionAttributes::XN::Disable,
-            };
-
-            // Determine access permission
-            let access_value = match permissions {
-                Permissions::ReadWriteExecute
-                | Permissions::ReadWriteOnly => RegionAttributes::AP::ReadWrite,
-                Permissions::ReadExecuteOnly
-                | Permissions::ReadOnly => RegionAttributes::AP::ReadOnly,
-                _ => RegionAttributes::AP::NoAccess,
+            // Determine access and execute permission
+            let (access_value, execute_value) = match permissions {
+                Permissions::ReadWriteExecute => (RegionAttributes::AP::ReadWrite, RegionAttributes::XN::Enable),
+                Permissions::ReadWriteOnly => (RegionAttributes::AP::ReadWrite, RegionAttributes::XN::Disable),
+                Permissions::ReadExecuteOnly => (RegionAttributes::AP::ReadOnly, RegionAttributes::XN::Enable),
+                Permissions::ReadOnly => (RegionAttributes::AP::ReadOnly, RegionAttributes::XN::Disable),
+                Permissions::ExecuteOnly => (RegionAttributes::AP::PrivilegedOnly, RegionAttributes::XN::Enable), // TODO
+                Permissions::NoAccess => (RegionAttributes::AP::PrivilegedOnly, RegionAttributes::XN::Disable), // TODO
             };
             
             // TODO: handle flexible start and end and packed 
