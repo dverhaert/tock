@@ -10,74 +10,8 @@ pub enum Permissions {
     NoAccess,
 }
 
-#[derive(Copy, Clone)]
-pub enum RegionType {
-    /// Fixed region
-    Fixed { 
-        start_address: usize, 
-        end_address: usize,
-    },
-
-    /// Start can be lower and end can be higher
-    Growable {
-        start: usize,
-        end: usize,
-        start_flexiblity: usize,
-        end_flexibility: usize,
-    },
-
-    /// Start as close as possible to `start`
-    /// Make length as close as possible to `min_length`
-    Packed {
-        start: usize,
-        min_length: usize,
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct Region {
-    region_type: RegionType,
-    permissions: Permissions,
-}
-
-impl Region {
-    pub fn new(
-        region_type: RegionType,
-        permissions: Permissions,
-    ) -> Region {
-        Region {
-            region_type: region_type,
-            permissions: permissions,
-        }
-    }
-
-    pub fn get_type(&self) -> RegionType {
-        self.region_type
-    }
-
-    pub fn get_permissions(&self) -> Permissions {
-        self.permissions
-    }
-
-    pub fn set_type(&mut self, region_type: RegionType) {
-        self.region_type = region_type;
-    }
-}
-
-impl Default for Region {
-    fn default() -> Region {
-        Region {
-            region_type: RegionType::Fixed { 
-                start_address: 0,
-                end_address: 0,
-            },
-            permissions: Permissions::NoAccess,
-        }
-    }
-}
-
 pub trait MPU {
-    type MpuConfig;
+    type MpuConfig: Default;
 
     /// Enables the MPU.
     fn enable_mpu(&self);
@@ -85,22 +19,66 @@ pub trait MPU {
     /// Disables the MPU.
     fn disable_mpu(&self);
 
-    /// Returns the number of supported MPU regions.
-    fn number_supported_regions(&self) -> u32;
+    /// Returns the total number of regions supported by the MPU.
+    fn number_total_regions(&self) -> u32;
 
-    /// Allocates a set of logical regions in the MPU.
+    /// Returns the number of MPU regions still available.
+    fn number_available_regions(&self) -> u32;
+    
+    /// Resets MPU region configuration.
+    fn reset_mpu_config(&self, config: Self::MpuConfig);
+
+    /// Sets up MPU regions for process RAM.
     ///
     /// # Arguments
     ///
-    /// `regions`: an array of disjoint logical regions.
+    /// `lower_bound`           : lower bound for allocating process memory
+    /// `upper_bound`           : upper bound for allocating process memory
+    /// `min_process_ram_size`  : minimum ram size to allocate for process
+    /// `initial_pam_size`      : intial size for the process acessible memory
+    /// `initial_grant_size`    : initial size for the process grant.
+    /// `config`                : configuration data for the MPU
     ///
     /// # Return Value
     ///
-    /// Returns MPU configuration data implementing the requested regions.
-    /// If it is infeasible to allocate a memory region, returns its index.
-    fn allocate_regions(regions: &mut [Region]) -> Result<Self::MpuConfig, usize>;
+    /// This function returns the start address and the size of the memory 
+    /// allocated for the process.
+    fn setup_ram_mpu_regions(
+        &self, 
+        lower_bound: const *u8,
+        upper_bound: const *u8,
+        min_process_ram_size: usize,
+        initial_pam_size: usize,
+        initial_grant_size: usize,
+        config: Self::MpuConfig
+    ) -> Option<(const *u8, usize)>;
 
-    /// Configures memory protection regions in the MPU.
+    /// Updates MPU regions for process RAM. 
+    ///
+    /// # Arguments
+    /// 
+    /// `new_app_memory_break`      : new address for the end of process acessible memory 
+    /// `new_kernel_memory_break`   : new address for the start of grant
+    /// `config`                    : configuration data for the MPU
+    fn update_ram_mpu_regions(
+        &self,
+        new_app_memory_break: const *u8,
+        new_kernel_memory_break: const *u8,
+        config: Self::MpuConfig
+    ) -> ReturnCode;
+
+    /// Adds new MPU region for a buffer.
+    ///
+    /// # Arguments
+    fn add_new_mpu_region(
+        &self,
+        lower_bound: const *u8,
+        upper_bound: const *u8,
+        min_buffer_size: usize,
+        permissions: Permissions
+    ) -> ReturnCode;
+
+    /// Configures the MPU.
     ///
     /// # Arguments
     ///
@@ -116,12 +94,48 @@ impl MPU for () {
 
     fn disable_mpu(&self) {}
 
-    fn number_supported_regions(&self) -> u32 {
+    fn number_supported_regions(&self) -> usize {
         8
     }
+    
+    fn number_available_regions(&self) -> usize {
+        8
+    }
+    
+    fn reset_mpu_config(&self, _: Self::MpuConfig) {}
 
-    fn allocate_regions(_: &mut [Region]) -> Result<Self::MpuConfig, usize> {
-        Ok(())
+    fn setup_ram_mpu_regions(
+        &self, 
+        lower_bound: const *u8,
+        _: const *u8,
+        min_app_ram_size: usize,
+        _: usize,
+        _: usize,
+        _: Self::MpuConfig
+    ) -> Option<(const *u8, usize)> {
+        Some((lower_bound, min_app_ram_size))
+    }
+
+    fn update_ram_mpu_regions(
+        &self,
+        new_app_memory_break: const *u8,
+        new_kernel_memory_break: const *u8,
+        config: Self::MpuConfig
+    ) -> ReturnCode {
+        ReturnCode::SUCCESS
+    }
+
+    /// Adds new MPU region for a buffer.
+    ///
+    /// # Arguments
+    fn add_new_mpu_region(
+        &self,
+        lower_bound: const *u8,
+        upper_bound: const *u8,
+        min_buffer_size: usize,
+        permissions: Permissions
+    ) -> ReturnCode {
+        ReturnCode::SUCCESS
     }
 
     fn configure_mpu(&self, _: &Self::MpuConfig) {}
