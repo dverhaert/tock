@@ -1,5 +1,7 @@
 //! Interface for configuring the Memory Protection Unit.
 
+use returncode::ReturnCode;
+
 #[derive(Copy, Clone)]
 pub enum Permissions {
     ReadWriteExecute,
@@ -20,10 +22,10 @@ pub trait MPU {
     fn disable_mpu(&self);
 
     /// Returns the total number of regions supported by the MPU.
-    fn number_total_regions(&self) -> u32;
+    fn number_total_regions(&self) -> usize;
 
     /// Returns the number of MPU regions still available.
-    fn number_available_regions(&self) -> u32;
+    fn number_available_regions(&self) -> usize;
     
     /// Resets MPU region configuration.
     fn reset_mpu_config(&self, config: Self::MpuConfig);
@@ -45,13 +47,13 @@ pub trait MPU {
     /// allocated for the process.
     fn setup_ram_mpu_regions(
         &self, 
-        lower_bound: const *u8,
-        upper_bound: const *u8,
+        lower_bound: *const u8,
+        upper_bound: *const u8,
         min_process_ram_size: usize,
         initial_pam_size: usize,
         initial_grant_size: usize,
         config: Self::MpuConfig
-    ) -> Option<(const *u8, usize)>;
+    ) -> Option<(*const u8, usize)>;
 
     /// Updates MPU regions for process RAM. 
     ///
@@ -62,8 +64,8 @@ pub trait MPU {
     /// `config`                    : configuration data for the MPU
     fn update_ram_mpu_regions(
         &self,
-        new_app_memory_break: const *u8,
-        new_kernel_memory_break: const *u8,
+        new_app_memory_break: *const u8,
+        new_kernel_memory_break: *const u8,
         config: Self::MpuConfig
     ) -> ReturnCode;
 
@@ -72,8 +74,8 @@ pub trait MPU {
     /// # Arguments
     fn add_new_mpu_region(
         &self,
-        lower_bound: const *u8,
-        upper_bound: const *u8,
+        lower_bound: *const u8,
+        upper_bound: *const u8,
         min_buffer_size: usize,
         permissions: Permissions
     ) -> ReturnCode;
@@ -94,7 +96,7 @@ impl MPU for () {
 
     fn disable_mpu(&self) {}
 
-    fn number_supported_regions(&self) -> usize {
+    fn number_total_regions(&self) -> usize {
         8
     }
     
@@ -106,20 +108,20 @@ impl MPU for () {
 
     fn setup_ram_mpu_regions(
         &self, 
-        lower_bound: const *u8,
-        _: const *u8,
+        lower_bound: *const u8,
+        _: *const u8,
         min_app_ram_size: usize,
         _: usize,
         _: usize,
         _: Self::MpuConfig
-    ) -> Option<(const *u8, usize)> {
+    ) -> Option<(*const u8, usize)> {
         Some((lower_bound, min_app_ram_size))
     }
 
     fn update_ram_mpu_regions(
         &self,
-        new_app_memory_break: const *u8,
-        new_kernel_memory_break: const *u8,
+        new_app_memory_break: *const u8,
+        new_kernel_memory_break: *const u8,
         config: Self::MpuConfig
     ) -> ReturnCode {
         ReturnCode::SUCCESS
@@ -130,8 +132,8 @@ impl MPU for () {
     /// # Arguments
     fn add_new_mpu_region(
         &self,
-        lower_bound: const *u8,
-        upper_bound: const *u8,
+        lower_bound: *const u8,
+        upper_bound: *const u8,
         min_buffer_size: usize,
         permissions: Permissions
     ) -> ReturnCode {
