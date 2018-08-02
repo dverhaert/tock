@@ -30,7 +30,8 @@ pub trait MPU {
     /// Resets MPU region configuration.
     fn reset_mpu_config(&self, config: Self::MpuConfig);
 
-    /// Sets up MPU regions for process RAM.
+    /// Sets up MPU region(s) for process accessible memory and computes
+    /// a memory start address and size to allocate for the process.
     ///
     /// # Arguments
     ///
@@ -39,33 +40,37 @@ pub trait MPU {
     /// `min_process_ram_size`  : minimum ram size to allocate for process
     /// `initial_pam_size`      : intial size for the process acessible memory
     /// `initial_grant_size`    : initial size for the process grant.
+    /// `permissions`           : permissions for process acessible memory region
     /// `config`                : configuration data for the MPU
     ///
     /// # Return Value
     ///
     /// This function returns the start address and the size of the memory 
     /// allocated for the process.
-    fn setup_ram_mpu_regions(
+    fn setup_pam_mpu_region(
         &self, 
         lower_bound: *const u8,
         upper_bound: *const u8,
         min_process_ram_size: usize,
         initial_pam_size: usize,
         initial_grant_size: usize,
+        permissions: Permissions,
         config: Self::MpuConfig
     ) -> Option<(*const u8, usize)>;
 
-    /// Updates MPU regions for process RAM. 
+    /// Updates MPU region(s) for process accesible memory. 
     ///
     /// # Arguments
     /// 
     /// `new_app_memory_break`      : new address for the end of process acessible memory 
     /// `new_kernel_memory_break`   : new address for the start of grant
+    /// `permissions`               : permissions for process accessible memory region
     /// `config`                    : configuration data for the MPU
-    fn update_ram_mpu_regions(
+    fn update_pam_mpu_region(
         &self,
         new_app_memory_break: *const u8,
         new_kernel_memory_break: *const u8,
+        permissions: Permissions,
         config: Self::MpuConfig
     ) -> ReturnCode;
 
@@ -88,6 +93,7 @@ pub trait MPU {
     fn configure_mpu(&self, config: &Self::MpuConfig);
 }
 
+// TODO: make a default impl instead
 /// No-op implementation of MPU trait
 impl MPU for () {
     type MpuConfig = ();
@@ -106,23 +112,25 @@ impl MPU for () {
     
     fn reset_mpu_config(&self, _: Self::MpuConfig) {}
 
-    fn setup_ram_mpu_regions(
+    fn setup_pam_mpu_region(
         &self, 
         lower_bound: *const u8,
         _: *const u8,
         min_app_ram_size: usize,
         _: usize,
         _: usize,
+        _: Permissions,
         _: Self::MpuConfig
     ) -> Option<(*const u8, usize)> {
         Some((lower_bound, min_app_ram_size))
     }
 
-    fn update_ram_mpu_regions(
+    fn update_pam_mpu_region(
         &self,
-        new_app_memory_break: *const u8,
-        new_kernel_memory_break: *const u8,
-        config: Self::MpuConfig
+        _: *const u8,
+        _: *const u8,
+        _: Permissions,
+        _: Self::MpuConfig
     ) -> ReturnCode {
         ReturnCode::SUCCESS
     }
