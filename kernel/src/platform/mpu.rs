@@ -26,9 +26,6 @@ pub trait MPU {
 
     /// Returns the number of MPU regions still available.
     fn number_available_regions(&self) -> usize;
-    
-    /// Resets MPU region configuration.
-    fn reset_mpu_config(&self, config: &mut Self::MpuConfig);
 
     /// Sets up MPU region(s) for process accessible memory and computes
     /// a memory start address and size to allocate for the process.
@@ -110,8 +107,6 @@ impl MPU for () {
     fn number_available_regions(&self) -> usize {
         8
     }
-    
-    fn reset_mpu_config(&self, _: &mut Self::MpuConfig) {}
 
     fn setup_pam_mpu_region(
         &self, 

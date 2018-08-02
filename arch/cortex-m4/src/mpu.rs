@@ -4,7 +4,8 @@ use kernel;
 use kernel::common::math::PowerOfTwo;
 use kernel::common::registers::{FieldValue, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
-use kernel::mpu::{Permissions, Region, RegionType};
+use kernel::mpu::Permissions;
+use kernel::ReturnCode;
 
 #[repr(C)]
 /// MPU Registers for the Cortex-M4 family
@@ -128,25 +129,48 @@ impl MPU {
 }
 
 #[derive(Copy, Clone)]
+pub struct CortexMConfig {
+    regions: [RegionConfig; 8],
+    next_region: usize,
+}
+
+impl Default for CortexMConfig {
+    fn default() -> CortexMConfig {
+        CortexMConfig {
+            regions: [
+                RegionConfig::empty(0),
+                RegionConfig::empty(1),
+                RegionConfig::empty(2),
+                RegionConfig::empty(3),
+                RegionConfig::empty(4),
+                RegionConfig::empty(5),
+                RegionConfig::empty(6),
+                RegionConfig::empty(7),
+            ],
+            next_region: 0,
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
 pub struct RegionConfig {
     base_address: FieldValue<u32, RegionBaseAddress::Register>,
     attributes: FieldValue<u32, RegionAttributes::Register>,
 }
 
+
 impl RegionConfig {
     fn empty(region_num: u32) -> RegionConfig {
-        let base_address = RegionBaseAddress::VALID::UseRBAR + RegionBaseAddress::REGION.val(region_num);
-        let attributes = RegionAttributes::ENABLE::CLEAR;
-
         RegionConfig {
-            base_address: base_address,
-            attributes: attributes,
+            base_address: RegionBaseAddress::VALID::UseRBAR 
+                          + RegionBaseAddress::REGION.val(region_num),
+            attributes: RegionAttributes::ENABLE::CLEAR,
         }
     }
 }
 
 impl kernel::mpu::MPU for MPU {
-    type MpuConfig = [RegionConfig; 8];
+    type MpuConfig = CortexMConfig;
 
     fn enable_mpu(&self) {
         let regs = &*self.0;
@@ -162,196 +186,217 @@ impl kernel::mpu::MPU for MPU {
         regs.ctrl.write(Control::ENABLE::CLEAR);
     }
 
-    fn number_supported_regions(&self) -> u32 {
+    fn number_total_regions(&self) -> usize {
         let regs = &*self.0;
-        regs.mpu_type.read(Type::DREGION)
+        regs.mpu_type.read(Type::DREGION) as usize
     }
 
-    fn allocate_regions(regions: &mut [Region]) -> Result<Self::MpuConfig, usize> {
-        let mut config = [
-            RegionConfig::empty(0),
-            RegionConfig::empty(1),
-            RegionConfig::empty(2),
-            RegionConfig::empty(3),
-            RegionConfig::empty(4),
-            RegionConfig::empty(5),
-            RegionConfig::empty(6),
-            RegionConfig::empty(7),
-        ];
+    fn number_available_regions(&self) -> usize {
+        // TODO
+        0 
+    }
 
-        for (i, region) in regions.iter().enumerate() {
-            // Only support 8 regions
-            if i >= 8 {
-                break;
-            }
-            
-            let region_num = i as u32;
-            let permissions = region.get_permissions();
+    fn setup_pam_mpu_region(
+        &self, 
+        lower_bound: *const u8,
+        upper_bound: *const u8,
+        min_process_ram_size: usize,
+        initial_pam_size: usize,
+        initial_grant_size: usize,
+        permissions: Permissions,
+        config: &mut Self::MpuConfig
+    ) -> Option<(*const u8, usize)> {
+        // TODO
+        None
+    }
 
-            // Determine access and execute permission
-            let (access_value, execute_value) = match permissions {
-                Permissions::ReadWriteExecute => (RegionAttributes::AP::ReadWrite, RegionAttributes::XN::Enable),
-                Permissions::ReadWriteOnly => (RegionAttributes::AP::ReadWrite, RegionAttributes::XN::Disable),
-                Permissions::ReadExecuteOnly => (RegionAttributes::AP::ReadOnly, RegionAttributes::XN::Enable),
-                Permissions::ReadOnly => (RegionAttributes::AP::ReadOnly, RegionAttributes::XN::Disable),
-                Permissions::ExecuteOnly => (RegionAttributes::AP::PrivilegedOnly, RegionAttributes::XN::Enable), // TODO
-                Permissions::NoAccess => (RegionAttributes::AP::PrivilegedOnly, RegionAttributes::XN::Disable), // TODO
-            };
-            
-            // TODO: handle flexible start and end and packed 
-            let (start, end) = match region.get_type() {
-                RegionType::Fixed { 
-                    start_address,
-                    end_address,
-                } => (start_address, end_address),
-                _ => {
-                    unimplemented!("Growable and Packed unimplemented.");
-                }
-            };
-            
-            let len = end - start;
+    fn update_pam_mpu_region(
+        &self,
+        new_app_memory_break: *const u8,
+        new_kernel_memory_break: *const u8,
+        permissions: Permissions,
+        config: &mut Self::MpuConfig
+    ) -> ReturnCode {
+        //TODO
+        ReturnCode::FAIL
+    }
 
-            // There are two possibilities we support:
-            //
-            // 1. The base address is aligned exactly to the size of the region,
-            //    which uses an MPU region with the exact base address and size of
-            //    the memory region.
-            //
-            // 2. Otherwise, we can use a larger MPU region and expose only MPU
-            //    subregions, as long as the memory region's base address is aligned
-            //    to 1/8th of a larger region size.
+    /// Adds new MPU region for a buffer.
+    ///
+    /// # Arguments
+    fn add_new_mpu_region(
+        &self,
+        lower_bound: *const u8,
+        upper_bound: *const u8,
+        min_buffer_size: usize,
+        permissions: Permissions,
+        config: &mut Self::MpuConfig
+    ) -> ReturnCode {
+        let region_num = config.next_region;
 
-            // Possibility 1
-            if start % len == 0 {
-                // Memory base aligned to memory size - straight forward case
-                let region_len = PowerOfTwo::floor(len as u32);
-
-                // exponent = log2(region_len)
-                let exponent = region_len.exp::<u32>();
-
-                if exponent < 5 {
-                    // Region sizes must be 32 Bytes or larger
-                    return Err(i);
-                } else if exponent > 32 {
-                    // Region sizes must be 4GB or smaller
-                    return Err(i);
-                }
-
-                let address_value = (start >> 5) as u32;
-                let region_len_value = exponent - 1;
-
-                let base_address = RegionBaseAddress::ADDR.val(address_value)
-                    + RegionBaseAddress::VALID::UseRBAR
-                    + RegionBaseAddress::REGION.val(region_num);
-
-                let attributes = RegionAttributes::ENABLE::SET
-                    + RegionAttributes::SIZE.val(region_len_value)
-                    + access_value
-                    + execute_value;
-                
-                config[i] = RegionConfig {
-                    base_address,
-                    attributes,
-                };
-            }
-            // Possibility 2
-            else {
-                // Memory base not aligned to memory size
-
-                // Which (power-of-two) subregion size would align with the base
-                // address?
-                //
-                // We find this by taking smallest binary substring of the base
-                // address with exactly one bit:
-                //
-                //      1 << (start.trailing_zeros())
-                let subregion_size = {
-                    let tz = start.trailing_zeros();
-                    // `start` should never be 0 because of that's taken care of by
-                    // the previous branch, but in case it is, do the right thing
-                    // anyway.
-                    if tz < 32 {
-                        (1 as usize) << tz
-                    } else {
-                        0
-                    }
-                };
-
-                // Once we have a subregion size, we get a region size by
-                // multiplying it by the number of subregions per region.
-                let region_size = subregion_size * 8;
-                // Finally, we calculate the region base by finding the nearest
-                // address below `start` that aligns with the region size.
-                let region_start = start - (start % region_size);
-
-                if region_size + region_start - start < len {
-                    // Sanity check that the amount left over space in the region
-                    // after `start` is at least as large as the memory region we
-                    // want to reference.
-                    return Err(i);
-                }
-                if len % subregion_size != 0 {
-                    // Sanity check that there is some integer X such that
-                    // subregion_size * X == len so none of `len` is left over when
-                    // we take the max_subregion.
-                    return Err(i);
-                }
-
-                // The index of the first subregion to activate is the number of
-                // regions between `region_start` (MPU) and `start` (memory).
-                let min_subregion = (start - region_start) / subregion_size;
-                // The index of the last subregion to activate is the number of
-                // regions that fit in `len`, plus the `min_subregion`, minus one
-                // (because subregions are zero-indexed).
-                let max_subregion = min_subregion + len / subregion_size - 1;
-
-                let region_len = PowerOfTwo::floor(region_size as u32);
-                // exponent = log2(region_len)
-                let exponent = region_len.exp::<u32>();
-                if exponent < 7 {
-                    // Subregions only supported for regions sizes 128 bytes and up.
-                    return Err(i);
-                } else if exponent > 32 {
-                    // Region sizes must be 4GB or smaller
-                    return Err(i);
-                }
-
-                // Turn the min/max subregion into a bitfield where all bits are `1`
-                // except for the bits whose index lie within
-                // [min_subregion, max_subregion]
-                //
-                // Note: Rust ranges are minimum inclusive, maximum exclusive, hence
-                // max_subregion + 1.
-                let subregion_mask =
-                    (min_subregion..(max_subregion + 1)).fold(!0, |res, i| res & !(1 << i)) & 0xff;
-
-                let address_value = (region_start >> 5) as u32;
-                let region_len_value = exponent - 1;
-
-                let base_address = RegionBaseAddress::ADDR.val(address_value)
-                    + RegionBaseAddress::VALID::UseRBAR
-                    + RegionBaseAddress::REGION.val(region_num);
-
-                let attributes = RegionAttributes::ENABLE::SET
-                    + RegionAttributes::SRD.val(subregion_mask)
-                    + RegionAttributes::SIZE.val(region_len_value)
-                    + access_value
-                    + execute_value;
-
-                config[i] = RegionConfig {
-                    base_address,
-                    attributes,
-                };
-            }
+        // Only 8 regions supported
+        if region_num >= 8 {
+            return ReturnCode::FAIL;
         }
 
-        Ok(config)
+        let start = lower_bound as usize;
+        let end = upper_bound as usize;
+        let len = min_buffer_size;
+
+        if end - start != len {
+            unimplemented!("Flexible region requests not yet implemented");
+        }
+
+        // Determine access and execute permission
+        let (access_value, execute_value) = match permissions {
+            Permissions::ReadWriteExecute => (RegionAttributes::AP::ReadWrite, RegionAttributes::XN::Enable),
+            Permissions::ReadWriteOnly => (RegionAttributes::AP::ReadWrite, RegionAttributes::XN::Disable),
+            Permissions::ReadExecuteOnly => (RegionAttributes::AP::ReadOnly, RegionAttributes::XN::Enable),
+            Permissions::ReadOnly => (RegionAttributes::AP::ReadOnly, RegionAttributes::XN::Disable),
+            Permissions::ExecuteOnly => (RegionAttributes::AP::PrivilegedOnly, RegionAttributes::XN::Enable), // TODO
+            Permissions::NoAccess => (RegionAttributes::AP::PrivilegedOnly, RegionAttributes::XN::Disable), // TODO
+        };
+
+        // There are two possibilities we support:
+        //
+        // 1. The base address is aligned exactly to the size of the region,
+        //    which uses an MPU region with the exact base address and size of
+        //    the memory region.
+        //
+        // 2. Otherwise, we can use a larger MPU region and expose only MPU
+        //    subregions, as long as the memory region's base address is aligned
+        //    to 1/8th of a larger region size.
+
+        // Possibility 1
+        if start % len == 0 {
+            // Memory base aligned to memory size - straight forward case
+            let region_len = PowerOfTwo::floor(len as u32);
+
+            // exponent = log2(region_len)
+            let exponent = region_len.exp::<u32>();
+
+            if exponent < 5 {
+                // Region sizes must be 32 Bytes or larger
+                return ReturnCode::FAIL;
+            } else if exponent > 32 {
+                // Region sizes must be 4GB or smaller
+                return ReturnCode::FAIL;
+            }
+
+            let address_value = (start >> 5) as u32;
+            let region_len_value = exponent - 1;
+
+            let base_address = RegionBaseAddress::ADDR.val(address_value)
+                + RegionBaseAddress::VALID::UseRBAR
+                + RegionBaseAddress::REGION.val(region_num as u32);
+
+            let attributes = RegionAttributes::ENABLE::SET
+                + RegionAttributes::SIZE.val(region_len_value)
+                + access_value
+                + execute_value;
+            
+            config.regions[region_num] = RegionConfig {
+                base_address,
+                attributes,
+            };
+        }
+        // Possibility 2
+        else {
+            // Memory base not aligned to memory size
+
+            // Which (power-of-two) subregion size would align with the base
+            // address?
+            //
+            // We find this by taking smallest binary substring of the base
+            // address with exactly one bit:
+            //
+            //      1 << (start.trailing_zeros())
+            let subregion_size = {
+                let tz = start.trailing_zeros();
+                // `start` should never be 0 because of that's taken care of by
+                // the previous branch, but in case it is, do the right thing
+                // anyway.
+                if tz < 32 {
+                    (1 as usize) << tz
+                } else {
+                    0
+                }
+            };
+
+            // Once we have a subregion size, we get a region size by
+            // multiplying it by the number of subregions per region.
+            let region_size = subregion_size * 8;
+            // Finally, we calculate the region base by finding the nearest
+            // address below `start` that aligns with the region size.
+            let region_start = start - (start % region_size);
+
+            if region_size + region_start - start < len {
+                // Sanity check that the amount left over space in the region
+                // after `start` is at least as large as the memory region we
+                // want to reference.
+                return ReturnCode::FAIL;
+            }
+            if len % subregion_size != 0 {
+                // Sanity check that there is some integer X such that
+                // subregion_size * X == len so none of `len` is left over when
+                // we take the max_subregion.
+                return ReturnCode::FAIL;
+            }
+
+            // The index of the first subregion to activate is the number of
+            // regions between `region_start` (MPU) and `start` (memory).
+            let min_subregion = (start - region_start) / subregion_size;
+            // The index of the last subregion to activate is the number of
+            // regions that fit in `len`, plus the `min_subregion`, minus one
+            // (because subregions are zero-indexed).
+            let max_subregion = min_subregion + len / subregion_size - 1;
+
+            let region_len = PowerOfTwo::floor(region_size as u32);
+            // exponent = log2(region_len)
+            let exponent = region_len.exp::<u32>();
+            if exponent < 7 {
+                // Subregions only supported for regions sizes 128 bytes and up.
+                return ReturnCode::FAIL;
+            } else if exponent > 32 {
+                // Region sizes must be 4GB or smaller
+                return ReturnCode::FAIL;
+            }
+
+            // Turn the min/max subregion into a bitfield where all bits are `1`
+            // except for the bits whose index lie within
+            // [min_subregion, max_subregion]
+            //
+            // Note: Rust ranges are minimum inclusive, maximum exclusive, hence
+            // max_subregion + 1.
+            let subregion_mask =
+                (min_subregion..(max_subregion + 1)).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+
+            let address_value = (region_start >> 5) as u32;
+            let region_len_value = exponent - 1;
+
+            let base_address = RegionBaseAddress::ADDR.val(address_value)
+                + RegionBaseAddress::VALID::UseRBAR
+                + RegionBaseAddress::REGION.val(region_num as u32);
+
+            let attributes = RegionAttributes::ENABLE::SET
+                + RegionAttributes::SRD.val(subregion_mask)
+                + RegionAttributes::SIZE.val(region_len_value)
+                + access_value
+                + execute_value;
+
+            config.regions[region_num] = RegionConfig {
+                base_address,
+                attributes,
+            };
+        }
+
+        ReturnCode::SUCCESS
     }
 
     fn configure_mpu(&self, config: &Self::MpuConfig) {
         let regs = &*self.0;
 
-        for region_config in config {
+        for region_config in config.regions.iter() {
             regs.rbar.write(region_config.base_address);
             regs.rasr.write(region_config.attributes);
         }
