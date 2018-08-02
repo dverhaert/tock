@@ -4,6 +4,7 @@ use kernel;
 use kernel::common::math::PowerOfTwo;
 use kernel::common::registers::{FieldValue, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
+use kernel::common::cells::MapCell;
 use kernel::mpu::Permissions;
 use kernel::ReturnCode;
 
@@ -120,11 +121,11 @@ const MPU_BASE_ADDRESS: StaticRef<MpuRegisters> =
     unsafe { StaticRef::new(0xE000ED90 as *const MpuRegisters) };
 
 /// Constructor field is private to limit who can create a new MPU
-pub struct MPU(StaticRef<MpuRegisters>);
+pub struct MPU(StaticRef<MpuRegisters>, MapCell<Option<RegionConfig>>);
 
 impl MPU {
     pub const unsafe fn new() -> MPU {
-        MPU(MPU_BASE_ADDRESS)
+        MPU(MPU_BASE_ADDRESS, MapCell::new(None)) // TODO: remove hack: this should not be stored here.
     }
 }
 
