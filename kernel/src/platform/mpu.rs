@@ -28,7 +28,7 @@ pub trait MPU {
     fn number_available_regions(&self) -> usize;
     
     /// Resets MPU region configuration.
-    fn reset_mpu_config(&self, config: Self::MpuConfig);
+    fn reset_mpu_config(&self, config: &mut Self::MpuConfig);
 
     /// Sets up MPU region(s) for process accessible memory and computes
     /// a memory start address and size to allocate for the process.
@@ -55,7 +55,7 @@ pub trait MPU {
         initial_pam_size: usize,
         initial_grant_size: usize,
         permissions: Permissions,
-        config: Self::MpuConfig
+        config: &mut Self::MpuConfig
     ) -> Option<(*const u8, usize)>;
 
     /// Updates MPU region(s) for process accesible memory. 
@@ -71,7 +71,7 @@ pub trait MPU {
         new_app_memory_break: *const u8,
         new_kernel_memory_break: *const u8,
         permissions: Permissions,
-        config: Self::MpuConfig
+        config: &mut Self::MpuConfig
     ) -> ReturnCode;
 
     /// Adds new MPU region for a buffer.
@@ -82,7 +82,8 @@ pub trait MPU {
         lower_bound: *const u8,
         upper_bound: *const u8,
         min_buffer_size: usize,
-        permissions: Permissions
+        permissions: Permissions,
+        config: &mut Self::MpuConfig
     ) -> ReturnCode;
 
     /// Configures the MPU.
@@ -110,7 +111,7 @@ impl MPU for () {
         8
     }
     
-    fn reset_mpu_config(&self, _: Self::MpuConfig) {}
+    fn reset_mpu_config(&self, _: &mut Self::MpuConfig) {}
 
     fn setup_pam_mpu_region(
         &self, 
@@ -120,7 +121,7 @@ impl MPU for () {
         _: usize,
         _: usize,
         _: Permissions,
-        _: Self::MpuConfig
+        _: &mut Self::MpuConfig
     ) -> Option<(*const u8, usize)> {
         Some((lower_bound, min_app_ram_size))
     }
@@ -130,7 +131,7 @@ impl MPU for () {
         _: *const u8,
         _: *const u8,
         _: Permissions,
-        _: Self::MpuConfig
+        _: &mut Self::MpuConfig
     ) -> ReturnCode {
         ReturnCode::SUCCESS
     }
@@ -140,10 +141,11 @@ impl MPU for () {
     /// # Arguments
     fn add_new_mpu_region(
         &self,
-        lower_bound: *const u8,
-        upper_bound: *const u8,
-        min_buffer_size: usize,
-        permissions: Permissions
+        _: *const u8,
+        _: *const u8,
+        _: usize,
+        _: Permissions,
+        _: &mut Self::MpuConfig
     ) -> ReturnCode {
         ReturnCode::SUCCESS
     }

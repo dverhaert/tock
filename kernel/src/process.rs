@@ -499,41 +499,48 @@ impl Process<'a> {
     }
 
     crate fn setup_mpu<MPU: mpu::MPU>(&self, mpu: &MPU) {
-        if mpu.number_supported_regions() != 8 {
+        if mpu.number_total_regions() != 8 {
             panic!("Currently Tock assumes 8 regions");
         }
 
-        let mut regions: [mpu::Region; 8] = [Default::default(); 8];
+        // TODO: Eventually we won't do this region computation every
+        // context switch, but rather cache the resulting the MPU config data
+        // in Process for use here
+        let mut config: MPU::MpuConfig = Default::default();
 
-        let flash_start = self.flash.as_ptr() as usize;
-        let flash_end = flash_start + self.flash.len();
+        let flash_start = self.flash.as_ptr();
+        let flash_len = self.flash.len();
+        let flash_end = unsafe { flash_start.offset(flash_len as isize) };
 
         // Flash region
-        let flash_region = mpu::Region::new(
-            mpu::RegionType::Fixed {
-                start_address: flash_start,
-                end_address: flash_end,
-            },
+        let rc = mpu.add_new_mpu_region(
+            flash_start, 
+            flash_end, 
+            flash_len, 
             mpu::Permissions::ReadExecuteOnly,
+            &mut config,
         );
 
-        regions[0] = flash_region;
+        if rc != ReturnCode::SUCCESS {
+            panic!("Unable to allocate flash MPU region");
+        }
 
-        let memory_start = self.memory.as_ptr() as usize;
-        let memory_end = memory_start + self.memory.len();
+        let memory_start = self.memory.as_ptr();
+        let memory_len = self.memory.len();
+        let memory_end = unsafe { memory_start.offset(memory_len as isize) };
 
         // Memory region
-        let memory_region = mpu::Region::new(
-            mpu::RegionType::Fixed {
-                start_address: memory_start,
-                end_address: memory_end,
-            },
+        let rc = mpu.add_new_mpu_region(
+            memory_start,
+            memory_end,
+            memory_len,
             mpu::Permissions::ReadWriteExecute,
+            &mut config,
         );
-
-        regions[1] = memory_region;
         
-        // TODO: no grant
+        if rc != ReturnCode::SUCCESS {
+            panic!("Unable to allocate memory MPU region");
+        }
 
         let grant_len = unsafe {
             math::PowerOfTwo::ceiling(
@@ -546,52 +553,44 @@ impl Process<'a> {
             self.memory
                 .as_ptr()
                 .offset(self.memory.len() as isize)
-                .offset(-(grant_len as isize)) as usize
+                .offset(-(grant_len as isize))
         };
 
-        let grant_end = grant_start + grant_len;
+        let grant_end = unsafe {grant_start.offset(grant_len as isize) };
 
         // Grant region
-        let grant_region = mpu::Region::new(
-            mpu::RegionType::Fixed {
-                start_address: grant_start,
-                end_address: grant_end,
-            },
-            // TODO: no grant
+        let rc = mpu.add_new_mpu_region(
+            grant_start,
+            grant_end,
+            grant_len,
             mpu::Permissions::NoAccess,
+            &mut config,
         );
-
-        regions[2] = grant_region;
-
-        let mut num_regions = 3;
+        
+        if rc != ReturnCode::SUCCESS {
+            panic!("Unable to allocate grant MPU region");
+        }
 
         // IPC regions
         for region in self.mpu_regions.iter() {
             if !region.get().0.is_null() {
-                let ipc_start = region.get().0 as usize;
-                let ipc_end = ipc_start + region.get().1.as_num::<u32>() as usize;
+                let ipc_start = region.get().0;
+                let ipc_len = region.get().1.as_num::<u32>() as usize;
+                let ipc_end = unsafe { ipc_start.offset(ipc_len as isize) };
 
-                let ipc_region = mpu::Region::new(
-                    mpu::RegionType::Fixed {
-                        start_address: ipc_start,
-                        end_address: ipc_end,
-                    },
+                let rc = mpu.add_new_mpu_region(
+                    ipc_start,
+                    ipc_end,
+                    ipc_len,
                     mpu::Permissions::ReadWriteExecute,
+                    &mut config,
                 );
-
-                regions[num_regions] = ipc_region;
-                num_regions += 1; 
+        
+                if rc != ReturnCode::SUCCESS {
+                    panic!("Unable to allocate grant MPU region");
+                }
             }
         }
-        
-        // TODO: Eventually we won't do this region computation every
-        // context switch, but rather cache the resulting the MPU config data
-        // in Process for use here
-
-        let config = match MPU::allocate_regions(&mut regions[..num_regions]) {
-            Ok(config) => config,
-            Err(index) => panic!("Unable to allocate MPU region at index {}.", index)
-        };
 
         // Set MPU regions
         mpu.configure_mpu(&config);
