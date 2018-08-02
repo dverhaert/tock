@@ -403,5 +403,13 @@ impl kernel::mpu::MPU for MPU {
             regs.rbar.write(region_config.base_address);
             regs.rasr.write(region_config.attributes);
         }
+
+        // TODO: remove hack
+        self.1.map(|val| {
+            if let Some(region_config) = val {
+                regs.rbar.write(region_config.base_address);
+                regs.rasr.write(region_config.attributes);
+            }
+        });
     }
 }
