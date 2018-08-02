@@ -91,8 +91,7 @@ pub trait MPU {
     fn configure_mpu(&self, config: &Self::MpuConfig);
 }
 
-// TODO: make a default impl instead
-/// No-op implementation of MPU trait
+/// Default implementation of MPU trait
 impl MPU for () {
     type MpuConfig = ();
 

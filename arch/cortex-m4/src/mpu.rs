@@ -390,6 +390,8 @@ impl kernel::mpu::MPU for MPU {
             };
         }
 
+        // Switch to the next region
+        config.next_region += 1; 
         ReturnCode::SUCCESS
     }
 
