@@ -206,7 +206,56 @@ impl kernel::mpu::MPU for MPU {
         permissions: Permissions,
         config: &mut Self::MpuConfig
     ) -> Option<(*const u8, usize)> {
-        // TODO
+
+        // If the user has not given enough memory, round up and fix.
+        if min_process_ram_size < initial_pam_size + initial_grant_size {
+            min_process_ram_size = initial_pam_size + initial_grant_size;
+        }
+
+        // We'll go through this code with some numeric examples, and 
+        // indicate this by EX.
+        // EX: region_len = PowerOfTwo::ceil(4500) = 8192
+        let region_len = PowerOfTwo::ceil(min_process_ram_size as u32);
+        
+        // exponent = log2(region_len)  
+        let exponent = region_len.exp::<u32>();
+
+        if exponent < 7 {
+            // Region sizes must be 128 Bytes or larger in order to support subregions
+            exponent = 7;
+            region_len = 128;
+        } else if exponent > 32 {
+            // Region sizes must be 4GB or smaller
+            return None;
+        }       
+        
+        // Preferably, the start of the region is equal to the lower bound
+        let region_start = lower_bound as usize;
+
+        // If the start doesn't align to the length, make sure it does
+        if region_start % region_len != 0 {
+            region_start = region_start + region_len - region_start % region_len;
+        }
+
+        // Make sure that the requested region fits in memory
+        if region_start + region_len > upper_bound as usize {
+            return None;
+        }
+         
+        // The memory initially allocated for the PAM will be aligned to an eigth of the total region length. 
+        // This allows subregions to control the growth of the PAM/grant.
+        // EX: subregions_used = 3500/8192 * 8 + 1 = 4;
+        let subregions_used = initial_pam_size/region_len * 8 + 1;
+        
+        // EX: 00001111 & 11111111 = 00001111
+        let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+
+        // TODO: change to actual region numbering instead of hack
+        let region_num = 7;
+
+        RegionConfig::new(region_start, region_len, region_num, subregion_mask, permissions);
+
+
         None
     }
 
@@ -217,7 +266,7 @@ impl kernel::mpu::MPU for MPU {
         permissions: Permissions,
         config: &mut Self::MpuConfig
     ) -> ReturnCode {
-        //TODO
+        // TODO
         ReturnCode::FAIL
     }
 

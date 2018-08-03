@@ -37,7 +37,7 @@ pub trait MPU {
     /// `min_process_ram_size`  : minimum ram size to allocate for process
     /// `initial_pam_size`      : intial size for the process acessible memory
     /// `initial_grant_size`    : initial size for the process grant.
-    /// `permissions`           : permissions for process acessible memory region
+    /// `permissions`           : permissions for process accessible memory region
     /// `config`                : configuration data for the MPU
     ///
     /// # Return Value
