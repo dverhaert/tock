@@ -161,6 +161,43 @@ pub struct RegionConfig {
 
 
 impl RegionConfig {
+    fn new(
+        base_address: u32,
+        size: u32,
+        region_num: u32,
+        subregion_mask: Option<u32>,
+        permissions: Permissions,
+    ) -> RegionConfig {
+        let (access_value, execute_value) = match permissions {
+            Permissions::ReadWriteExecute => (RegionAttributes::AP::ReadWrite, RegionAttributes::XN::Enable),
+            Permissions::ReadWriteOnly => (RegionAttributes::AP::ReadWrite, RegionAttributes::XN::Disable),
+            Permissions::ReadExecuteOnly => (RegionAttributes::AP::ReadOnly, RegionAttributes::XN::Enable),
+            Permissions::ReadOnly => (RegionAttributes::AP::ReadOnly, RegionAttributes::XN::Disable),
+            Permissions::ExecuteOnly => (RegionAttributes::AP::PrivilegedOnly, RegionAttributes::XN::Enable), // TODO
+            Permissions::NoAccess => (RegionAttributes::AP::PrivilegedOnly, RegionAttributes::XN::Disable), // TODO
+        };
+
+        let base_address = RegionBaseAddress::ADDR.val(base_address)
+            + RegionBaseAddress::VALID::UseRBAR
+            + RegionBaseAddress::REGION.val(region_num);
+
+        let mut attributes = RegionAttributes::ENABLE::SET
+            + RegionAttributes::SIZE.val(size)
+            + access_value
+            + execute_value;
+
+        // Subregions enabled
+        if let Some(value) = subregion_mask {
+            attributes += RegionAttributes::SRD.val(value)
+
+        }
+
+        RegionConfig {
+            base_address,
+            attributes,
+        }
+    } 
+    
     fn empty(region_num: u32) -> RegionConfig {
         RegionConfig {
             base_address: RegionBaseAddress::VALID::UseRBAR 
@@ -248,16 +285,6 @@ impl kernel::mpu::MPU for MPU {
             unimplemented!("Flexible region requests not yet implemented");
         }
 
-        // Determine access and execute permission
-        let (access_value, execute_value) = match permissions {
-            Permissions::ReadWriteExecute => (RegionAttributes::AP::ReadWrite, RegionAttributes::XN::Enable),
-            Permissions::ReadWriteOnly => (RegionAttributes::AP::ReadWrite, RegionAttributes::XN::Disable),
-            Permissions::ReadExecuteOnly => (RegionAttributes::AP::ReadOnly, RegionAttributes::XN::Enable),
-            Permissions::ReadOnly => (RegionAttributes::AP::ReadOnly, RegionAttributes::XN::Disable),
-            Permissions::ExecuteOnly => (RegionAttributes::AP::PrivilegedOnly, RegionAttributes::XN::Enable), // TODO
-            Permissions::NoAccess => (RegionAttributes::AP::PrivilegedOnly, RegionAttributes::XN::Disable), // TODO
-        };
-
         // There are two possibilities we support:
         //
         // 1. The base address is aligned exactly to the size of the region,
@@ -286,20 +313,15 @@ impl kernel::mpu::MPU for MPU {
 
             let address_value = (start >> 5) as u32;
             let region_len_value = exponent - 1;
-
-            let base_address = RegionBaseAddress::ADDR.val(address_value)
-                + RegionBaseAddress::VALID::UseRBAR
-                + RegionBaseAddress::REGION.val(region_num as u32);
-
-            let attributes = RegionAttributes::ENABLE::SET
-                + RegionAttributes::SIZE.val(region_len_value)
-                + access_value
-                + execute_value;
             
-            config.regions[region_num] = RegionConfig {
-                base_address,
-                attributes,
-            };
+            config.regions[region_num] = RegionConfig::new(
+                address_value,
+                region_len_value,
+                region_num as u32,
+                None,
+                permissions,
+            );
+
         }
         // Possibility 2
         else {
@@ -385,14 +407,18 @@ impl kernel::mpu::MPU for MPU {
                 + access_value
                 + execute_value;
 
-            config.regions[region_num] = RegionConfig {
-                base_address,
-                attributes,
-            };
+            config.regions[region_num] = RegionConfig::new(
+                address_value,
+                region_len_value,
+                region_num as u32,
+                None,
+                permissions
+            );
         }
 
         // Switch to the next region
         config.next_region += 1; 
+
         ReturnCode::SUCCESS
     }
 
