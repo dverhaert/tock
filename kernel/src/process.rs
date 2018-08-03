@@ -660,10 +660,10 @@ impl Process<'a> {
             // Need to make sure that the amount of memory we allocate for
             // this process at least covers this state.
             if min_app_ram_size
-                < (grant_ptrs_offset + callbacks_offset + process_struct_offset + initial_stack_pointer) as u32
+                < (grant_ptrs_offset + callbacks_offset + process_struct_offset) as u32
             {
                 min_app_ram_size =
-                    (grant_ptrs_offset + callbacks_offset + process_struct_offset + initial_stack_pointer) as u32;
+                    (grant_ptrs_offset + callbacks_offset + process_struct_offset) as u32;
             }
 
             // TODO round app_ram_size up to a closer MPU unit.

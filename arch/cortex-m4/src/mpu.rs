@@ -243,19 +243,20 @@ impl kernel::mpu::MPU for MPU {
         permissions: Permissions,
         config: &mut Self::MpuConfig
     ) -> Option<(*const u8, usize)> {
-
+        let mut process_ram_size = min_process_ram_size;
         // If the user has not given enough memory, round up and fix.
-        if min_process_ram_size < initial_pam_size + initial_grant_size {
-            min_process_ram_size = initial_pam_size + initial_grant_size;
+        if process_ram_size < initial_pam_size + initial_grant_size {
+            process_ram_size = initial_pam_size + initial_grant_size;
         }
 
         // We'll go through this code with some numeric examples, and 
         // indicate this by EX.
-        // EX: region_len = PowerOfTwo::ceil(4500) = 8192
-        let region_len = PowerOfTwo::ceil(min_process_ram_size as u32);
+        // EX: region_len = PowerOfTwo::ceiling(4500) = 8192
+        let region_len_poweroftwo = PowerOfTwo::ceiling(process_ram_size as u32);
         
+        let mut region_len = PowerOfTwo::as_num(region_len_poweroftwo);
         // exponent = log2(region_len)  
-        let exponent = region_len.exp::<u32>();
+        let mut exponent = region_len_poweroftwo.exp::<u32>();
 
         if exponent < 7 {
             // Region sizes must be 128 Bytes or larger in order to support subregions
@@ -267,7 +268,7 @@ impl kernel::mpu::MPU for MPU {
         }       
         
         // Preferably, the start of the region is equal to the lower bound
-        let region_start = lower_bound as usize;
+        let mut region_start = lower_bound as u32;
 
         // If the start doesn't align to the length, make sure it does
         if region_start % region_len != 0 {
@@ -275,14 +276,14 @@ impl kernel::mpu::MPU for MPU {
         }
 
         // Make sure that the requested region fits in memory
-        if region_start + region_len > upper_bound as usize {
+        if region_start + region_len > upper_bound as u32 {
             return None;
         }
          
         // The memory initially allocated for the PAM will be aligned to an eigth of the total region length. 
         // This allows subregions to control the growth of the PAM/grant.
         // EX: subregions_used = 3500/8192 * 8 + 1 = 4;
-        let subregions_used = initial_pam_size/region_len * 8 + 1;
+        let subregions_used = initial_pam_size as u32/region_len * 8 + 1;
         
         // EX: 00001111 & 11111111 = 00001111
         let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
@@ -290,8 +291,12 @@ impl kernel::mpu::MPU for MPU {
         // TODO: change to actual region numbering instead of hack
         let region_num = 7;
 
-        RegionConfig::new(region_start, region_len, region_num, subregion_mask, permissions);
+        let region_len_value = exponent - 1;
 
+        self.1.map(|val| {
+            let region_config = RegionConfig::new(region_start, region_len_value, region_num, Some(subregion_mask), permissions);
+            Some(region_config);
+        });
 
         None
     }
