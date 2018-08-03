@@ -188,8 +188,7 @@ impl RegionConfig {
 
         // Subregions enabled
         if let Some(value) = subregion_mask {
-            attributes += RegionAttributes::SRD.val(value)
-
+            attributes += RegionAttributes::SRD.val(value);
         }
 
         RegionConfig {
@@ -396,16 +395,6 @@ impl kernel::mpu::MPU for MPU {
 
             let address_value = (region_start >> 5) as u32;
             let region_len_value = exponent - 1;
-
-            let base_address = RegionBaseAddress::ADDR.val(address_value)
-                + RegionBaseAddress::VALID::UseRBAR
-                + RegionBaseAddress::REGION.val(region_num as u32);
-
-            let attributes = RegionAttributes::ENABLE::SET
-                + RegionAttributes::SRD.val(subregion_mask)
-                + RegionAttributes::SIZE.val(region_len_value)
-                + access_value
-                + execute_value;
 
             config.regions[region_num] = RegionConfig::new(
                 address_value,
