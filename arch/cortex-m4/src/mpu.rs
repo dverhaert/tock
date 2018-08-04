@@ -228,12 +228,12 @@ impl kernel::mpu::MPU for MPU {
         regs.mpu_type.read(Type::DREGION) as usize
     }
 
-    fn number_available_regions(&self) -> usize {
+    fn number_unallocated_regions(&self, config: Self::MpuConfig) -> usize {
         // TODO
         0 
     }
 
-    fn setup_pam_mpu_region(
+    fn setup_process_memory_layout(
         &self, 
         lower_bound: *const u8,
         upper_bound: *const u8,
@@ -301,33 +301,33 @@ impl kernel::mpu::MPU for MPU {
         None
     }
 
-    fn update_pam_mpu_region(
+    fn update_process_memory_layout(
         &self,
         new_app_memory_break: *const u8,
         new_kernel_memory_break: *const u8,
         permissions: Permissions,
         config: &mut Self::MpuConfig
-    ) -> ReturnCode {
+    ) -> Result<(), ()> {
         // TODO
-        ReturnCode::FAIL
+        Err(())
     }
 
     /// Adds new MPU region for a buffer.
     ///
     /// # Arguments
-    fn add_new_mpu_region(
+    fn expose_memory_buffer(
         &self,
         lower_bound: *const u8,
         upper_bound: *const u8,
         min_buffer_size: usize,
         permissions: Permissions,
         config: &mut Self::MpuConfig
-    ) -> ReturnCode {
+    ) -> Option<(*const u8, *const u8)>  {
         let region_num = config.next_region;
 
         // Only 8 regions supported
         if region_num >= 8 {
-            return ReturnCode::FAIL;
+            return None;
         }
 
         let start = lower_bound as usize;
@@ -358,10 +358,10 @@ impl kernel::mpu::MPU for MPU {
 
             if exponent < 5 {
                 // Region sizes must be 32 Bytes or larger
-                return ReturnCode::FAIL;
+                return None;
             } else if exponent > 32 {
                 // Region sizes must be 4GB or smaller
-                return ReturnCode::FAIL;
+                return None;
             }
 
             let address_value = (start >> 5) as u32;
@@ -410,13 +410,13 @@ impl kernel::mpu::MPU for MPU {
                 // Sanity check that the amount left over space in the region
                 // after `start` is at least as large as the memory region we
                 // want to reference.
-                return ReturnCode::FAIL;
+                return None;
             }
             if len % subregion_size != 0 {
                 // Sanity check that there is some integer X such that
                 // subregion_size * X == len so none of `len` is left over when
                 // we take the max_subregion.
-                return ReturnCode::FAIL;
+                return None;
             }
 
             // The index of the first subregion to activate is the number of
@@ -432,10 +432,10 @@ impl kernel::mpu::MPU for MPU {
             let exponent = region_len.exp::<u32>();
             if exponent < 7 {
                 // Subregions only supported for regions sizes 128 bytes and up.
-                return ReturnCode::FAIL;
+                return None;
             } else if exponent > 32 {
                 // Region sizes must be 4GB or smaller
-                return ReturnCode::FAIL;
+                return None;
             }
 
             // Turn the min/max subregion into a bitfield where all bits are `1`
@@ -462,8 +462,7 @@ impl kernel::mpu::MPU for MPU {
         // Switch to the next region
         config.next_region += 1; 
 
-        ReturnCode::SUCCESS
-    }
+        Some((start as *const u8, end as *const u8)) }
 
     fn configure_mpu(&self, config: &Self::MpuConfig) {
         let regs = &*self.0;

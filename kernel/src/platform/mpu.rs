@@ -1,7 +1,5 @@
 //! Interface for configuring the Memory Protection Unit.
 
-use returncode::ReturnCode;
-
 #[derive(Copy, Clone)]
 pub enum Permissions {
     ReadWriteExecute,
@@ -24,8 +22,8 @@ pub trait MPU {
     /// Returns the total number of regions supported by the MPU.
     fn number_total_regions(&self) -> usize;
 
-    /// Returns the number of MPU regions still available.
-    fn number_available_regions(&self) -> usize;
+    /// Returns the number of unallocated MPU regions in a particular configuration.
+    fn number_unallocated_regions(&self, config: Self::MpuConfig) -> usize;
 
     /// Sets up MPU region(s) for process accessible memory and computes
     /// a memory start address and size to allocate for the process.
@@ -44,14 +42,14 @@ pub trait MPU {
     ///
     /// This function returns the start address and the size of the memory 
     /// allocated for the process.
-    fn setup_pam_mpu_region(
+    fn setup_process_memory_layout(
         &self, 
         lower_bound: *const u8,
         upper_bound: *const u8,
         min_process_ram_size: usize,
         initial_pam_size: usize,
         initial_grant_size: usize,
-        permissions: Permissions,
+        pam_permissions: Permissions,
         config: &mut Self::MpuConfig
     ) -> Option<(*const u8, usize)>;
 
@@ -63,27 +61,31 @@ pub trait MPU {
     /// `new_kernel_memory_break`   : new address for the start of grant
     /// `permissions`               : permissions for process accessible memory region
     /// `config`                    : configuration data for the MPU
-    fn update_pam_mpu_region(
+    ///
+    /// # Return Value
+    fn update_process_memory_layout(
         &self,
-        new_app_memory_break: *const u8,
-        new_kernel_memory_break: *const u8,
-        permissions: Permissions,
+        app_memory_break: *const u8,
+        kernel_memory_break: *const u8,
+        pam_permissions: Permissions,
         config: &mut Self::MpuConfig
-    ) -> ReturnCode;
+    ) -> Result<(), ()>;
 
     /// Adds new MPU region for a buffer.
     ///
     /// # Arguments
-    fn add_new_mpu_region(
+    ///
+    /// # Return Value
+    fn expose_memory_buffer(
         &self,
         lower_bound: *const u8,
         upper_bound: *const u8,
         min_buffer_size: usize,
         permissions: Permissions,
         config: &mut Self::MpuConfig
-    ) -> ReturnCode;
+    ) -> Option<(*const u8, *const u8)>;
 
-    /// Configures the MPU.
+    /// Sets the MPU to use the provided configuration.
     ///
     /// # Arguments
     ///
@@ -103,14 +105,14 @@ impl MPU for () {
         8
     }
     
-    fn number_available_regions(&self) -> usize {
+    fn number_unallocated_regions(&self, _: Self::MpuConfig) -> usize {
         8
     }
 
-    fn setup_pam_mpu_region(
+    fn setup_process_memory_layout(
         &self, 
         lower_bound: *const u8,
-        _: *const u8,
+        upper_bound: *const u8,
         min_app_ram_size: usize,
         _: usize,
         _: usize,
@@ -120,28 +122,28 @@ impl MPU for () {
         Some((lower_bound, min_app_ram_size))
     }
 
-    fn update_pam_mpu_region(
+    fn update_process_memory_layout(
         &self,
         _: *const u8,
         _: *const u8,
         _: Permissions,
         _: &mut Self::MpuConfig
-    ) -> ReturnCode {
-        ReturnCode::SUCCESS
+    ) -> Result<(), ()> {
+        Ok(())
     }
 
     /// Adds new MPU region for a buffer.
     ///
     /// # Arguments
-    fn add_new_mpu_region(
+    fn expose_memory_buffer(
         &self,
         _: *const u8,
         _: *const u8,
         _: usize,
         _: Permissions,
         _: &mut Self::MpuConfig
-    ) -> ReturnCode {
-        ReturnCode::SUCCESS
+    ) -> Option<(*const u8, *const u8)> {
+        None
     }
 
     fn configure_mpu(&self, _: &Self::MpuConfig) {}

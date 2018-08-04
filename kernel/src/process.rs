@@ -513,16 +513,15 @@ impl Process<'a> {
         let flash_end = unsafe { flash_start.offset(flash_len as isize) };
 
         // Flash region
-        let rc = mpu.add_new_mpu_region(
+        match mpu.expose_memory_buffer(
             flash_start, 
             flash_end, 
             flash_len, 
             mpu::Permissions::ReadExecuteOnly,
             &mut config,
-        );
-
-        if rc != ReturnCode::SUCCESS {
-            panic!("Unable to allocate flash MPU region");
+        ) {
+            None => panic!("Unable to allocate flash MPU region"),
+            Some(_) => (),
         }
 
         let memory_start = self.memory.as_ptr();
@@ -530,16 +529,15 @@ impl Process<'a> {
         let memory_end = unsafe { memory_start.offset(memory_len as isize) };
 
         // Memory region
-        let rc = mpu.add_new_mpu_region(
+        match mpu.expose_memory_buffer(
             memory_start,
             memory_end,
             memory_len,
             mpu::Permissions::ReadWriteExecute,
             &mut config,
-        );
-        
-        if rc != ReturnCode::SUCCESS {
-            panic!("Unable to allocate memory MPU region");
+        ) {
+            None => panic!("Unable to allocate memory MPU region"),
+            Some(_) => (),
         }
 
         let grant_len = unsafe {
@@ -559,16 +557,15 @@ impl Process<'a> {
         let grant_end = unsafe {grant_start.offset(grant_len as isize) };
 
         // Grant region
-        let rc = mpu.add_new_mpu_region(
+        match mpu.expose_memory_buffer(
             grant_start,
             grant_end,
             grant_len,
             mpu::Permissions::NoAccess,
             &mut config,
-        );
-        
-        if rc != ReturnCode::SUCCESS {
-            panic!("Unable to allocate grant MPU region");
+        ) {
+            None => panic!("Unable to allocate grant MPU region"),
+            Some(_) => (),
         }
 
         // IPC regions
@@ -578,16 +575,15 @@ impl Process<'a> {
                 let ipc_len = region.get().1.as_num::<u32>() as usize;
                 let ipc_end = unsafe { ipc_start.offset(ipc_len as isize) };
 
-                let rc = mpu.add_new_mpu_region(
+                match mpu.expose_memory_buffer(
                     ipc_start,
                     ipc_end,
                     ipc_len,
                     mpu::Permissions::ReadWriteExecute,
                     &mut config,
-                );
-        
-                if rc != ReturnCode::SUCCESS {
-                    panic!("Unable to allocate grant MPU region");
+                ) {
+                    None => panic!("Unable to allocate IPC MPU region"),
+                    Some(_) => (),
                 }
             }
         }
