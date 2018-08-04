@@ -46,7 +46,7 @@ pub trait MPU {
         min_process_ram_size: usize,
         initial_pam_size: usize,
         initial_grant_size: usize,
-        pam_permissions: Permissions,
+        permissions: Permissions,
         config: &mut Self::MpuConfig
     ) -> Option<(*const u8, usize)>;
 
@@ -64,7 +64,7 @@ pub trait MPU {
         &self,
         app_memory_break: *const u8,
         kernel_memory_break: *const u8,
-        pam_permissions: Permissions,
+        permissions: Permissions,
         config: &mut Self::MpuConfig
     ) -> Result<(), ()>;
 
@@ -80,7 +80,7 @@ pub trait MPU {
         min_buffer_size: usize,
         permissions: Permissions,
         config: &mut Self::MpuConfig
-    ) -> Option<(*const u8, *const u8)>;
+    ) -> Option<(*const u8, usize)>;
 
     /// Sets the MPU to use the provided configuration.
     ///
@@ -112,7 +112,12 @@ impl MPU for () {
         _: Permissions,
         _: &mut Self::MpuConfig
     ) -> Option<(*const u8, usize)> {
-        Some((lower_bound, min_app_ram_size))
+        let available_memory = (upper_bound as usize) - (lower_bound as usize);
+        if available_memory < min_app_ram_size {
+            None
+        } else {
+            Some((lower_bound, min_app_ram_size))
+        }
     }
 
     fn update_process_memory_layout(
@@ -125,18 +130,20 @@ impl MPU for () {
         Ok(())
     }
 
-    /// Adds new MPU region for a buffer.
-    ///
-    /// # Arguments
     fn expose_memory_buffer(
         &self,
-        _: *const u8,
-        _: *const u8,
-        _: usize,
+        lower_bound: *const u8,
+        upper_bound: *const u8,
+        minimum_buffer_size: usize,
         _: Permissions,
         _: &mut Self::MpuConfig
-    ) -> Option<(*const u8, *const u8)> {
-        None
+    ) -> Option<(*const u8, usize)> {
+        let available_memory = (upper_bound as usize) - (lower_bound as usize);
+        if available_memory < minimum_buffer_size {
+            None
+        } else {
+            Some((lower_bound, minimum_buffer_size))
+        }
     }
 
     fn configure_mpu(&self, _: &Self::MpuConfig) {}

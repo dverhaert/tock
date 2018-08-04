@@ -6,7 +6,6 @@ use kernel::common::registers::{FieldValue, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::common::cells::MapCell;
 use kernel::mpu::Permissions;
-use kernel::ReturnCode;
 
 #[repr(C)]
 /// MPU Registers for the Cortex-M4 family
@@ -288,10 +287,9 @@ impl kernel::mpu::MPU for MPU {
 
         let region_len_value = exponent - 1;
 
-        self.1.map(|val| {
-            let region_config = RegionConfig::new(region_start, region_len_value, region_num, Some(subregion_mask), permissions);
-            Some(region_config);
-        });
+        let region_config = RegionConfig::new(region_start, region_len_value, region_num, Some(subregion_mask), permissions);
+
+        self.1.replace(Some(region_config));
 
         None
     }
@@ -317,7 +315,7 @@ impl kernel::mpu::MPU for MPU {
         min_buffer_size: usize,
         permissions: Permissions,
         config: &mut Self::MpuConfig
-    ) -> Option<(*const u8, *const u8)>  {
+    ) -> Option<(*const u8, usize)>  {
         let region_num = config.next_region;
 
         // Only 8 regions supported
@@ -457,7 +455,8 @@ impl kernel::mpu::MPU for MPU {
         // Switch to the next region
         config.next_region += 1; 
 
-        Some((start as *const u8, end as *const u8)) }
+        Some((start as *const u8, len)) 
+    }
 
     fn configure_mpu(&self, config: &Self::MpuConfig) {
         let regs = &*self.0;
