@@ -228,11 +228,6 @@ impl kernel::mpu::MPU for MPU {
         regs.mpu_type.read(Type::DREGION) as usize
     }
 
-    fn number_unallocated_regions(&self, config: Self::MpuConfig) -> usize {
-        // TODO
-        0 
-    }
-
     fn setup_process_memory_layout(
         &self, 
         lower_bound: *const u8,

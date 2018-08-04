@@ -22,9 +22,6 @@ pub trait MPU {
     /// Returns the total number of regions supported by the MPU.
     fn number_total_regions(&self) -> usize;
 
-    /// Returns the number of unallocated MPU regions in a particular configuration.
-    fn number_unallocated_regions(&self, config: Self::MpuConfig) -> usize;
-
     /// Sets up MPU region(s) for process accessible memory and computes
     /// a memory start address and size to allocate for the process.
     ///
@@ -102,10 +99,6 @@ impl MPU for () {
     fn disable_mpu(&self) {}
 
     fn number_total_regions(&self) -> usize {
-        8
-    }
-    
-    fn number_unallocated_regions(&self, _: Self::MpuConfig) -> usize {
         8
     }
 
