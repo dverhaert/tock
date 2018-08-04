@@ -54,9 +54,9 @@ pub trait MPU {
     ///
     /// # Arguments
     /// 
-    /// `new_app_memory_break`      : new address for the end of process acessible memory 
-    /// `new_kernel_memory_break`   : new address for the start of grant
-    /// `permissions`               : permissions for process accessible memory region
+    /// `app_memory_break`          : address for the end of process accessible memory 
+    /// `kernel_memory_break`       : address for the start of grant memory
+    /// `permissions`               : permissions for the PAM (process accessible memory) region
     /// `config`                    : configuration data for the MPU
     ///
     /// # Return Value
