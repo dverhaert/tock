@@ -130,24 +130,15 @@ impl MPU {
 
 #[derive(Copy, Clone)]
 pub struct CortexMConfig {
-    regions: [RegionConfig; 8],
-    next_region: usize,
+    _pam_region: Option<RegionConfig>,
+    regions: [Option<RegionConfig>; 7],
 }
 
 impl Default for CortexMConfig {
     fn default() -> CortexMConfig {
         CortexMConfig {
-            regions: [
-                RegionConfig::empty(0),
-                RegionConfig::empty(1),
-                RegionConfig::empty(2),
-                RegionConfig::empty(3),
-                RegionConfig::empty(4),
-                RegionConfig::empty(5),
-                RegionConfig::empty(6),
-                RegionConfig::empty(7),
-            ],
-            next_region: 0,
+            _pam_region: None,
+            regions: [None; 7],
         }
     }
 }
@@ -204,6 +195,8 @@ impl RegionConfig {
         }
     }
 }
+
+const PAM_REGION_NUM: usize = 7;
 
 impl kernel::mpu::MPU for MPU {
     type MpuConfig = CortexMConfig;
@@ -284,13 +277,11 @@ impl kernel::mpu::MPU for MPU {
         // EX: 00001111 & 11111111 = 00001111
         let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
 
-        // TODO: change to actual region numbering instead of hack
-        let region_num = 7;
-
         let region_len_value = exponent - 1;
 
-        let region_config = RegionConfig::new(region_start, region_len_value, region_num, Some(subregion_mask), permissions);
+        let region_config = RegionConfig::new(region_start, region_len_value, PAM_REGION_NUM as u32, Some(subregion_mask), permissions);
 
+        // TODO: put this in config
         self.1.replace(Some(region_config));
 
         None
@@ -306,9 +297,6 @@ impl kernel::mpu::MPU for MPU {
         Err(())
     }
 
-    /// Adds new MPU region for a buffer.
-    ///
-    /// # Arguments
     fn expose_memory_buffer(
         &self,
         parent_start: *const u8,
@@ -317,13 +305,23 @@ impl kernel::mpu::MPU for MPU {
         permissions: Permissions,
         config: &mut Self::MpuConfig
     ) -> Option<(*const u8, usize)>  {
-        let region_num = config.next_region;
+        let mut region_num = 0; 
+
+        // Find unused region number
+        for (index, region) in config.regions.iter().enumerate() {
+            if let None = region {
+                region_num = index;
+            } else if index == config.regions.len() - 1 {
+                return None;
+            }
+        }
 
         // Only 8 regions supported
         if region_num >= 8 {
             return None;
         }
 
+        // TODO
         if parent_size != min_buffer_size {
             unimplemented!("Flexible region requests not yet implemented");
         }
@@ -360,14 +358,15 @@ impl kernel::mpu::MPU for MPU {
             let address_value = (start >> 5) as u32;
             let region_len_value = exponent - 1;
             
-            config.regions[region_num] = RegionConfig::new(
+            let region_config = RegionConfig::new(
                 address_value,
                 region_len_value,
                 region_num as u32,
                 None,
                 permissions,
             );
-
+            
+            config.regions[region_num] = Some(region_config); 
         }
         // Possibility 2
         else {
@@ -443,17 +442,16 @@ impl kernel::mpu::MPU for MPU {
             let address_value = (region_start >> 5) as u32;
             let region_len_value = exponent - 1;
 
-            config.regions[region_num] = RegionConfig::new(
+            let region_config = RegionConfig::new(
                 address_value,
                 region_len_value,
                 region_num as u32,
                 Some(subregion_mask),
                 permissions
             );
+            
+            config.regions[region_num] = Some(region_config); 
         }
-
-        // Switch to the next region
-        config.next_region += 1; 
 
         Some((start as *const u8, len)) 
     }
@@ -461,17 +459,36 @@ impl kernel::mpu::MPU for MPU {
     fn configure_mpu(&self, config: &Self::MpuConfig) {
         let regs = &*self.0;
 
-        for region_config in config.regions.iter() {
-            regs.rbar.write(region_config.base_address);
-            regs.rasr.write(region_config.attributes);
+        // Set MPU regions
+        for (index, region) in config.regions.iter().enumerate() {
+            match region {
+                Some(region_config) => {
+                    regs.rbar.write(region_config.base_address);
+                    regs.rasr.write(region_config.attributes);
+                },
+                None =>  {
+                    let region_config = RegionConfig::empty(index as u32);
+                    regs.rbar.write(region_config.base_address);
+                    regs.rasr.write(region_config.attributes);
+                }
+            };
+
         }
 
-        // TODO: remove hack
-        self.1.map(|val| {
-            if let Some(region_config) = val {
-                regs.rbar.write(region_config.base_address);
-                regs.rasr.write(region_config.attributes);
-            }
+        // Set PAM region
+        // TODO: use config for this
+        self.1.map(|region| {
+            match region {
+                Some(region_config) => {
+                    regs.rbar.write(region_config.base_address);
+                    regs.rasr.write(region_config.attributes);
+                },
+                None =>  {
+                    let region_config = RegionConfig::empty(PAM_REGION_NUM as u32);
+                    regs.rbar.write(region_config.base_address);
+                    regs.rasr.write(region_config.attributes);
+                }
+            };
         });
     }
 }

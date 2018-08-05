@@ -11,7 +11,7 @@ pub enum Permissions {
 }
 
 pub trait MPU {
-    type MpuConfig: Default;
+    type MpuConfig: Default = ();
 
     /// Enables the MPU.
     fn enable_mpu(&self) {}
@@ -147,6 +147,4 @@ pub trait MPU {
 }
 
 /// Implement default MPU trait for unit.
-impl MPU for () {
-    type MpuConfig = ();
-}
+impl MPU for () {}
