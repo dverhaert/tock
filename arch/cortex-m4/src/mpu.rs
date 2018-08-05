@@ -461,34 +461,25 @@ impl kernel::mpu::MPU for MPU {
 
         // Set MPU regions
         for (index, region) in config.regions.iter().enumerate() {
-            match region {
-                Some(region_config) => {
-                    regs.rbar.write(region_config.base_address);
-                    regs.rasr.write(region_config.attributes);
-                },
-                None =>  {
-                    let region_config = RegionConfig::empty(index as u32);
-                    regs.rbar.write(region_config.base_address);
-                    regs.rasr.write(region_config.attributes);
-                }
+            let region_config = match region {
+                Some(region_config) => region_config.clone(),
+                None => RegionConfig::empty(index as u32),
             };
 
+            regs.rbar.write(region_config.base_address);
+            regs.rasr.write(region_config.attributes);
         }
 
         // Set PAM region
         // TODO: use config for this
         self.1.map(|region| {
-            match region {
-                Some(region_config) => {
-                    regs.rbar.write(region_config.base_address);
-                    regs.rasr.write(region_config.attributes);
-                },
-                None =>  {
-                    let region_config = RegionConfig::empty(PAM_REGION_NUM as u32);
-                    regs.rbar.write(region_config.base_address);
-                    regs.rasr.write(region_config.attributes);
-                }
+            let region_config = match region {
+                Some(region_config) => region_config.clone(),
+                None => RegionConfig::empty(PAM_REGION_NUM as u32),
             };
+
+            regs.rbar.write(region_config.base_address);
+            regs.rasr.write(region_config.attributes);
         });
     }
 }
