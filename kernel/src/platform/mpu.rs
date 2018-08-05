@@ -14,13 +14,15 @@ pub trait MPU {
     type MpuConfig: Default;
 
     /// Enables the MPU.
-    fn enable_mpu(&self);
+    fn enable_mpu(&self) {}
 
     /// Disables the MPU.
-    fn disable_mpu(&self);
+    fn disable_mpu(&self) {}
 
     /// Returns the total number of regions supported by the MPU.
-    fn number_total_regions(&self) -> usize;
+    fn number_total_regions(&self) -> usize {
+        8
+    }
     
     /// Chooses the location for a process's memory, and sets up
     /// an MPU region to expose the process-owned portion.
@@ -51,16 +53,24 @@ pub trait MPU {
     /// This function returns the start address and the size of the memory 
     /// allocated for the process. If it is infeasible to allocate the memory or the MPU
     /// region, or if the function has already been called, returns None.
+    #[allow(unused_variables)]
     fn setup_process_memory_layout(
         &self, 
         lower_bound: *const u8,
         upper_bound: *const u8,
-        min_process_ram_size: usize,
+        min_app_ram_size: usize,
         initial_pam_size: usize,
         initial_grant_size: usize,
         permissions: Permissions,
         config: &mut Self::MpuConfig
-    ) -> Option<(*const u8, usize)>;
+    ) -> Option<(*const u8, usize)> {
+        let available_memory = (upper_bound as usize) - (lower_bound as usize);
+        if available_memory < min_app_ram_size {
+            None
+        } else {
+            Some((lower_bound, min_app_ram_size))
+        }
+    }
 
     /// Updates the MPU region for process accesible memory to reflect a changed location
     /// of the app memory and kernel memory breaks.
@@ -75,12 +85,15 @@ pub trait MPU {
     /// 
     /// Returns an error if it is infeasible to update the PAM MPU region, or if it was
     /// never created.
+    #[allow(unused_variables)]
     fn update_process_memory_layout(
         &self,
         app_memory_break: *const u8,
         kernel_memory_break: *const u8,
         config: &mut Self::MpuConfig
-    ) -> Result<(), ()>;
+    ) -> Result<(), ()> {
+        Ok(())
+    }
 
     /// Adds new MPU region for an arbitrarily-located buffer.
     ///
@@ -99,6 +112,7 @@ pub trait MPU {
     /// # Return Value
     ///
     /// Returns the region.
+    #[allow(unused_variables)]
     fn expose_memory_buffer(
         &self,
         lower_bound: *const u8,
@@ -106,71 +120,25 @@ pub trait MPU {
         min_buffer_size: usize,
         permissions: Permissions,
         config: &mut Self::MpuConfig
-    ) -> Option<(*const u8, usize)>;
+    ) -> Option<(*const u8, usize)> {
+        let available_memory = (upper_bound as usize) - (lower_bound as usize);
+        if available_memory < min_buffer_size {
+            None
+        } else {
+            Some((lower_bound, min_buffer_size))
+        }
+    }
 
     /// Configures the MPU with the provided region configuration.
     ///
     /// # Arguments
     ///
     /// `config`: region configuration.
-    fn configure_mpu(&self, config: &Self::MpuConfig);
+    #[allow(unused_variables)]
+    fn configure_mpu(&self, config: &Self::MpuConfig) {}
 }
 
-/// Default implementation of MPU trait
+/// Implement MPU trait for unit.
 impl MPU for () {
     type MpuConfig = ();
-
-    fn enable_mpu(&self) {}
-
-    fn disable_mpu(&self) {}
-
-    fn number_total_regions(&self) -> usize {
-        8
-    }
-
-    fn setup_process_memory_layout(
-        &self, 
-        lower_bound: *const u8,
-        upper_bound: *const u8,
-        min_app_ram_size: usize,
-        _: usize,
-        _: usize,
-        _: Permissions,
-        _: &mut Self::MpuConfig
-    ) -> Option<(*const u8, usize)> {
-        let available_memory = (upper_bound as usize) - (lower_bound as usize);
-        if available_memory < min_app_ram_size {
-            None
-        } else {
-            Some((lower_bound, min_app_ram_size))
-        }
-    }
-
-    fn update_process_memory_layout(
-        &self,
-        _: *const u8,
-        _: *const u8,
-        _: Permissions,
-        _: &mut Self::MpuConfig
-    ) -> Result<(), ()> {
-        Ok(())
-    }
-
-    fn expose_memory_buffer(
-        &self,
-        lower_bound: *const u8,
-        upper_bound: *const u8,
-        minimum_buffer_size: usize,
-        _: Permissions,
-        _: &mut Self::MpuConfig
-    ) -> Option<(*const u8, usize)> {
-        let available_memory = (upper_bound as usize) - (lower_bound as usize);
-        if available_memory < minimum_buffer_size {
-            None
-        } else {
-            Some((lower_bound, minimum_buffer_size))
-        }
-    }
-
-    fn configure_mpu(&self, _: &Self::MpuConfig) {}
 }

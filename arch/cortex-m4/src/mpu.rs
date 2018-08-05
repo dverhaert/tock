@@ -235,7 +235,7 @@ impl kernel::mpu::MPU for MPU {
         initial_pam_size: usize,
         initial_grant_size: usize,
         permissions: Permissions,
-        config: &mut Self::MpuConfig
+        _config: &mut Self::MpuConfig
     ) -> Option<(*const u8, usize)> {
         let mut process_ram_size = min_process_ram_size;
         // If the user has not given enough memory, round up and fix.
@@ -296,10 +296,9 @@ impl kernel::mpu::MPU for MPU {
 
     fn update_process_memory_layout(
         &self,
-        new_app_memory_break: *const u8,
-        new_kernel_memory_break: *const u8,
-        permissions: Permissions,
-        config: &mut Self::MpuConfig
+        _new_app_memory_break: *const u8,
+        _new_kernel_memory_break: *const u8,
+        _config: &mut Self::MpuConfig
     ) -> Result<(), ()> {
         // TODO
         Err(())
@@ -447,7 +446,7 @@ impl kernel::mpu::MPU for MPU {
                 address_value,
                 region_len_value,
                 region_num as u32,
-                None,
+                Some(subregion_mask),
                 permissions
             );
         }
