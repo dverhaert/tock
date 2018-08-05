@@ -21,9 +21,20 @@ pub trait MPU {
 
     /// Returns the total number of regions supported by the MPU.
     fn number_total_regions(&self) -> usize;
-
-    /// Sets up MPU region(s) for process accessible memory and computes
-    /// a memory start address and size to allocate for the process.
+    
+    /// Chooses the location for a process's memory, and sets up
+    /// an MPU region to expose the process-owned portion.
+    ///
+    /// The implementor must allocate a memory region for the process that is at 
+    /// least `min_process_ram_size` bytes in size and lies completely within the 
+    /// specified bounds. It must also set up an MPU region exposing at least 
+    /// `initial_pam_size` bytes at the beginning of this parent memory region, 
+    /// with the specified permissions, and store the region in the `config` variable. 
+    /// This MPU region must not reach the point `initial_grant_size` bytes before
+    /// the end of the total memory region.
+    ///
+    /// This function should only be called once during the lifetime of a process. If the
+    /// function has been called previously, then the implementor must return None.
     ///
     /// # Arguments
     ///
@@ -33,12 +44,13 @@ pub trait MPU {
     /// `initial_pam_size`      : intial size for the process acessible memory
     /// `initial_grant_size`    : initial size for the process grant.
     /// `permissions`           : permissions for process accessible memory region
-    /// `config`                : configuration data for the MPU
+    /// `config`                : structure to store MPU configuration 
     ///
     /// # Return Value
     ///
     /// This function returns the start address and the size of the memory 
-    /// allocated for the process.
+    /// allocated for the process. If it is infeasible to allocate the memory or the MPU
+    /// region, or if the function has already been called, returns None.
     fn setup_process_memory_layout(
         &self, 
         lower_bound: *const u8,
@@ -50,29 +62,43 @@ pub trait MPU {
         config: &mut Self::MpuConfig
     ) -> Option<(*const u8, usize)>;
 
-    /// Updates MPU region(s) for process accesible memory. 
+    /// Updates the MPU region for process accesible memory to reflect a changed location
+    /// of the app memory and kernel memory breaks.
     ///
     /// # Arguments
     /// 
     /// `app_memory_break`          : address for the end of process accessible memory 
     /// `kernel_memory_break`       : address for the start of grant memory
-    /// `permissions`               : permissions for the PAM (process accessible memory) region
     /// `config`                    : configuration data for the MPU
     ///
     /// # Return Value
+    /// 
+    /// Returns an error if it is infeasible to update the PAM MPU region, or if it was
+    /// never created.
     fn update_process_memory_layout(
         &self,
         app_memory_break: *const u8,
         kernel_memory_break: *const u8,
-        permissions: Permissions,
         config: &mut Self::MpuConfig
     ) -> Result<(), ()>;
 
-    /// Adds new MPU region for a buffer.
+    /// Adds new MPU region for an arbitrarily-located buffer.
+    ///
+    /// The implementor must create an MPU region at least `min_buffer_size`
+    /// in size within the specified bounds and with the specified permissions,
+    /// and store it within `config`.
     ///
     /// # Arguments
     ///
+    /// `lower_bound`       : lower bound address for the buffer 
+    /// `upper_bound`       : upper bound address for the buffer 
+    /// `min_buffer_size`   : minimum size of the buffer
+    /// `permissions`       : permissions for the MPU region
+    /// `config`            : structure to store MPU configuration
+    ///
     /// # Return Value
+    ///
+    /// Returns the region.
     fn expose_memory_buffer(
         &self,
         lower_bound: *const u8,
@@ -82,11 +108,11 @@ pub trait MPU {
         config: &mut Self::MpuConfig
     ) -> Option<(*const u8, usize)>;
 
-    /// Sets the MPU to use the provided configuration.
+    /// Configures the MPU with the provided region configuration.
     ///
     /// # Arguments
     ///
-    /// `config`: configuration used to set regions.
+    /// `config`: region configuration.
     fn configure_mpu(&self, config: &Self::MpuConfig);
 }
 
