@@ -229,24 +229,25 @@ impl kernel::mpu::MPU for MPU {
 
     fn setup_process_memory_layout(
         &self, 
-        lower_bound: *const u8,
-        upper_bound: *const u8,
-        min_process_ram_size: usize,
+        parent_start: *const u8,
+        parent_size: usize,
+        min_app_ram_size: usize,
         initial_pam_size: usize,
         initial_grant_size: usize,
         permissions: Permissions,
         _config: &mut Self::MpuConfig
     ) -> Option<(*const u8, usize)> {
-        let mut process_ram_size = min_process_ram_size;
         // If the user has not given enough memory, round up and fix.
-        if process_ram_size < initial_pam_size + initial_grant_size {
-            process_ram_size = initial_pam_size + initial_grant_size;
-        }
+        let app_ram_size = if min_app_ram_size < initial_pam_size + initial_grant_size {
+            initial_pam_size + initial_grant_size
+        } else {
+            min_app_ram_size
+        };
 
         // We'll go through this code with some numeric examples, and 
         // indicate this by EX.
         // EX: region_len = PowerOfTwo::ceiling(4500) = 8192
-        let region_len_poweroftwo = PowerOfTwo::ceiling(process_ram_size as u32);
+        let region_len_poweroftwo = PowerOfTwo::ceiling(app_ram_size as u32);
         
         let mut region_len = PowerOfTwo::as_num(region_len_poweroftwo);
         // exponent = log2(region_len)  
@@ -262,7 +263,7 @@ impl kernel::mpu::MPU for MPU {
         }       
         
         // Preferably, the start of the region is equal to the lower bound
-        let mut region_start = lower_bound as u32;
+        let mut region_start = parent_start as u32;
 
         // If the start doesn't align to the length, make sure it does
         if region_start % region_len != 0 {
@@ -270,7 +271,8 @@ impl kernel::mpu::MPU for MPU {
         }
 
         // Make sure that the requested region fits in memory
-        if region_start + region_len > upper_bound as u32 {
+        let upper_bound = parent_start as u32 + parent_size as u32;
+        if region_start + region_len > upper_bound {
             return None;
         }
          
@@ -309,8 +311,8 @@ impl kernel::mpu::MPU for MPU {
     /// # Arguments
     fn expose_memory_buffer(
         &self,
-        lower_bound: *const u8,
-        upper_bound: *const u8,
+        parent_start: *const u8,
+        parent_size: usize,
         min_buffer_size: usize,
         permissions: Permissions,
         config: &mut Self::MpuConfig
@@ -322,13 +324,12 @@ impl kernel::mpu::MPU for MPU {
             return None;
         }
 
-        let start = lower_bound as usize;
-        let end = upper_bound as usize;
-        let len = min_buffer_size;
-
-        if end - start != len {
+        if parent_size != min_buffer_size {
             unimplemented!("Flexible region requests not yet implemented");
         }
+        
+        let start = parent_start as usize;
+        let len = min_buffer_size;
 
         // There are two possibilities we support:
         //

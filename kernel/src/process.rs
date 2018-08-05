@@ -510,12 +510,11 @@ impl Process<'a> {
 
         let flash_start = self.flash.as_ptr();
         let flash_len = self.flash.len();
-        let flash_end = unsafe { flash_start.offset(flash_len as isize) };
 
         // Flash region
         match mpu.expose_memory_buffer(
             flash_start, 
-            flash_end, 
+            flash_len,
             flash_len, 
             mpu::Permissions::ReadExecuteOnly,
             &mut config,
@@ -526,12 +525,11 @@ impl Process<'a> {
 
         let memory_start = self.memory.as_ptr();
         let memory_len = self.memory.len();
-        let memory_end = unsafe { memory_start.offset(memory_len as isize) };
 
         // Memory region
         match mpu.expose_memory_buffer(
             memory_start,
-            memory_end,
+            memory_len,
             memory_len,
             mpu::Permissions::ReadWriteExecute,
             &mut config,
@@ -554,12 +552,10 @@ impl Process<'a> {
                 .offset(-(grant_len as isize))
         };
 
-        let grant_end = unsafe {grant_start.offset(grant_len as isize) };
-
         // Grant region
         match mpu.expose_memory_buffer(
             grant_start,
-            grant_end,
+            grant_len,
             grant_len,
             mpu::Permissions::NoAccess,
             &mut config,
@@ -573,11 +569,10 @@ impl Process<'a> {
             if !region.get().0.is_null() {
                 let ipc_start = region.get().0;
                 let ipc_len = region.get().1.as_num::<u32>() as usize;
-                let ipc_end = unsafe { ipc_start.offset(ipc_len as isize) };
 
                 match mpu.expose_memory_buffer(
                     ipc_start,
-                    ipc_end,
+                    ipc_len,
                     ipc_len,
                     mpu::Permissions::ReadWriteExecute,
                     &mut config,
