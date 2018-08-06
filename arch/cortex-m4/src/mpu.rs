@@ -297,7 +297,7 @@ impl kernel::mpu::MPU for MPU {
         &self,
         new_app_memory_break: *const u8,
         new_kernel_memory_break: *const u8,
-        config: &mut Self::MpuConfig
+        _config: &mut Self::MpuConfig
     ) -> Result<(), ()> {
         // get old memory region data from somewhere, let's see how we get this
         
