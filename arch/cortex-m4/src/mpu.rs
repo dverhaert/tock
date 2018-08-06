@@ -132,14 +132,24 @@ impl MPU {
 #[derive(Copy, Clone)]
 pub struct CortexMConfig {
     pam_region: Option<PAMRegionInfo>,
-    regions: [Option<RegionConfig>; 7],
+    regions: [RegionConfig; 7],
+    num_regions_used: usize,
 }
 
 impl Default for CortexMConfig {
     fn default() -> CortexMConfig {
         CortexMConfig {
             pam_region: None,
-            regions: [None; 7],
+            regions: [ 
+                RegionConfig::empty(0),
+                RegionConfig::empty(1),
+                RegionConfig::empty(2),
+                RegionConfig::empty(3),
+                RegionConfig::empty(4),
+                RegionConfig::empty(5),
+                RegionConfig::empty(6),
+            ],
+            num_regions_used: 0,
         }
     }
 }
@@ -417,16 +427,7 @@ impl kernel::mpu::MPU for MPU {
         permissions: Permissions,
         config: &mut Self::MpuConfig,
     ) -> Option<(*const u8, usize)> {
-        let mut region_num = 0;
-
-        // Find unused region number
-        for (index, region) in config.regions.iter().enumerate() {
-            if let None = region {
-                region_num = index;
-            } else if index == config.regions.len() - 1 {
-                return None;
-            }
-        }
+        let region_num = config.num_regions_used;
 
         // Only 8 regions supported
         if region_num >= 8 {
@@ -478,7 +479,8 @@ impl kernel::mpu::MPU for MPU {
                 permissions,
             );
 
-            config.regions[region_num] = Some(region_config);
+            config.regions[region_num] = region_config;
+            config.num_regions_used += 1;
         }
         // Possibility 2
         else {
@@ -562,7 +564,8 @@ impl kernel::mpu::MPU for MPU {
                 permissions,
             );
 
-            config.regions[region_num] = Some(region_config);
+            config.regions[region_num] = region_config;
+            config.num_regions_used += 1;
         }
 
         Some((start as *const u8, len))
@@ -572,12 +575,7 @@ impl kernel::mpu::MPU for MPU {
         let regs = &*self.0;
 
         // Set MPU regions
-        for (index, region) in config.regions.iter().enumerate() {
-            let region_config = match region {
-                Some(region_config) => region_config.clone(),
-                None => RegionConfig::empty(index as u32),
-            };
-
+        for region_config in config.regions.iter() {
             regs.rbar.write(region_config.base_address);
             regs.rasr.write(region_config.attributes);
         }
