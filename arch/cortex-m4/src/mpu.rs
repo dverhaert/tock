@@ -279,11 +279,13 @@ impl kernel::mpu::MPU for MPU {
         }
          
         // The memory initially allocated for the PAM will be aligned to an eigth of the total region length. 
-        // This allows subregions to control the growth of the PAM/grant.
+        // This allows Cortex-M subregions to control the growth of the PAM/grant in a more linear way.
+        // The Cortex-M has a total of 8 subregions per region, which is why we can have precision in 
+        // eights of total region lengths.
         // EX: subregions_used = 3500/8192 * 8 + 1 = 4;
         let subregions_used = initial_pam_size as u32/region_len * 8 + 1;
         
-        // EX: 00001111 & 11111111 = 00001111
+        // EX: 00001111 & 11111111 = 00001111 --> Use the first four subregions (0 = enable)
         let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
 
         let region_len_value = exponent - 1;
@@ -319,29 +321,69 @@ impl kernel::mpu::MPU for MPU {
     ) -> Result<(), ()> {
         // get old memory region data from somewhere, let's see how we get this
         
+        // 
+        let mut region_start = 0;
+        let mut region_len = 0;
+        let mut permissions = Permissions::ReadWriteExecute;
+        let mut num_subregions_used = 0; 
+
+        self.1.map(|config| {
+            if let Some(cortexm_config) = config {
+                match cortexm_config.pam_region {
+                    Some(pam_region) => {
+                        region_start = pam_region.base_address;
+                        region_len = pam_region.size;
+                        permissions = pam_region.permissions;
+                        num_subregions_used = pam_region.num_subregions_used;
+
+                    },
+                    None => { unimplemented!(""); },
+                };
+            }
+        });
+
+        // The PAM ends at new_app_memory_break, it's different from the region length.
         let pam_end = new_app_memory_break as usize;
         let grant_start = new_kernel_memory_break as usize;
 
+        let pam_size = pam_end - region_start as usize;
+
         if pam_end > grant_start {
             // Error: out of memory for the application. Please allocate more memory for your application.
-            return None;
+            return Err(());
         }
 
-        let pam_size = pam_end = pam_start;
-
-        // Measure execution time? Maybe we can get some optimizations in the future.
-        let subregions_used = pam_size as u32/region_len * 8 + 1;
-        let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
-
-        // TODO: Do we need this check, or is function only called on actual updating? Memory already expanded enough
-        if subregion_mask = old_subregion_mask {
-            return None;
-        } 
+        // TODO: Measure execution time of these operations. Maybe we can get some optimizations in the future.
+        let new_subregions_used = pam_size as u32/region_len * 8 + 1;
+        
+        if num_subregions_used == new_subregions_used {
+            return Ok(());
+        }
         else {
-            let region_config = RegionConfig::new(region_start, region_len_value, PAM_REGION_NUM as u32, Some(subregion_mask), permissions);    
+            let subregion_mask = (0..new_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;// Recompute the exponent so we can pass it back into the region config
+            // TODO: Move calculation of of region_len_value in Region create function
+            let region_len_poweroftwo = PowerOfTwo::ceiling(region_len as u32);        
+            let exponent = region_len_poweroftwo.exp::<u32>();
+            let region_len_value = exponent - 1;
+
+            let region_config = RegionConfig::new(region_start, region_len_value, PAM_REGION_NUM as u32, Some(subregion_mask), permissions); 
+
+            self.1.map(|config| {
+                if let Some(cortexm_config) = config {
+                    let pam_region = PAMRegionInfo {
+                        base_address: region_start,
+                        size: region_len,
+                        permissions: permissions,
+                        num_subregions_used: new_subregions_used,
+                        region: region_config,
+                    };
+                    cortexm_config.pam_region = Some(pam_region);
+                }
+            });
+            Ok(())
         }
-        // 
-        Err(())
+
+        
     }
 
     fn expose_memory_region(
