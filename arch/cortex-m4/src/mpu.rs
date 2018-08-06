@@ -130,6 +130,9 @@ impl MPU {
 
 #[derive(Copy, Clone)]
 pub struct CortexMConfig {
+    _pam_start: Option<*const u8>,
+    _pam_end: Option<usize>,
+    _pam_permissions: Option<Permissions>,
     _pam_region: Option<RegionConfig>,
     regions: [Option<RegionConfig>; 7],
 }
@@ -137,6 +140,9 @@ pub struct CortexMConfig {
 impl Default for CortexMConfig {
     fn default() -> CortexMConfig {
         CortexMConfig {
+            _pam_start: None,
+            _pam_end: None,
+            _pam_permissions: None,
             _pam_region: None,
             regions: [None; 7],
         }
