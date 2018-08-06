@@ -2,8 +2,9 @@
 
 use kernel;
 use kernel::common::cells::MapCell;
-use kernel::common::math::PowerOfTwo;
 use kernel::common::registers::{FieldValue, ReadOnly, ReadWrite};
+use kernel::common::math;
+use kernel::common::math::PowerOfTwo;
 use kernel::common::StaticRef;
 use kernel::mpu::Permissions;
 
@@ -264,12 +265,8 @@ impl kernel::mpu::MPU for MPU {
 
         // We'll go through this code with some numeric examples, and
         // indicate this by EX.
-        // EX: region_len = PowerOfTwo::ceiling(4500) = 8192
-        let region_len_poweroftwo = PowerOfTwo::ceiling(app_ram_size as u32);
-
-        let mut region_len = PowerOfTwo::as_num(region_len_poweroftwo);
-        // exponent = log2(region_len)
-        let mut exponent = region_len_poweroftwo.exp::<u32>();
+        let mut region_len = math::closest_power_of_two(app_ram_size as u32); 
+        let mut exponent = math::log_base_two(region_len); 
 
         if exponent < 7 {
             // Region sizes must be 128 Bytes or larger in order to support subregions
@@ -283,9 +280,9 @@ impl kernel::mpu::MPU for MPU {
         // Preferably, the start of the region is equal to the lower bound
         let mut region_start = parent_start as u32;
 
-        // If the start doesn't align to the length, make sure it does
+        // If the start doesn't align to the length, move region forward until it does
         if region_start % region_len != 0 {
-            region_start = region_start + region_len - region_start % region_len;
+            region_start = region_start + region_len - (region_start % region_len);
         }
 
         // Make sure that the requested region fits in memory
