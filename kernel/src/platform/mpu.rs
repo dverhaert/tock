@@ -103,17 +103,17 @@ pub trait MPU {
         }
     }
 
-    /// Adds a new MPU region exposing a buffer.
+    /// Adds a new MPU region exposing a region in memory.
     ///
-    /// The implementor must create an MPU region at least `min_buffer_size`
+    /// The implementor must create an MPU region at least `min_region_size`
     /// in size within the specified parent region, with the specified permissions,
     /// and store it within `config`.
     ///
     /// # Arguments
     ///
-    /// `lower_bound`       : lower bound address for the buffer 
-    /// `upper_bound`       : upper bound address for the buffer 
-    /// `min_buffer_size`   : minimum size of the buffer
+    /// `lower_bound`       : lower bound address for the region 
+    /// `upper_bound`       : upper bound address for the region 
+    /// `min_region_size`   : minimum size of the region
     /// `permissions`       : permissions for the MPU region
     /// `config`            : MPU region configuration 
     ///
@@ -122,18 +122,18 @@ pub trait MPU {
     /// Returns the MPU region allocated. If it is infeasible to allocate the
     /// region, returns None.
     #[allow(unused_variables)]
-    fn expose_memory_buffer(
+    fn expose_memory_region(
         &self,
         parent_start: *const u8,
         parent_size: usize,
-        min_buffer_size: usize,
+        min_region_size: usize,
         permissions: Permissions,
         config: &mut Self::MpuConfig
     ) -> Option<(*const u8, usize)> {
-        if min_buffer_size > parent_size {
+        if min_region_size > parent_size {
             None
         } else {
-            Some((parent_start, min_buffer_size))
+            Some((parent_start, min_region_size))
         }
     }
 

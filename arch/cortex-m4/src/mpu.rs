@@ -289,19 +289,42 @@ impl kernel::mpu::MPU for MPU {
 
     fn update_process_memory_layout(
         &self,
-        _new_app_memory_break: *const u8,
-        _new_kernel_memory_break: *const u8,
-        _config: &mut Self::MpuConfig
+        new_app_memory_break: *const u8,
+        new_kernel_memory_break: *const u8,
+        config: &mut Self::MpuConfig
     ) -> Result<(), ()> {
-        // TODO
+        // get old memory region data from somewhere, let's see how we get this
+        
+        let pam_end = new_app_memory_break as usize;
+        let grant_start = new_kernel_memory_break as usize;
+
+        if pam_end > grant_start {
+            // Error: out of memory for the application. Please allocate more memory for your application.
+            return None;
+        }
+
+        let pam_size = pam_end = pam_start;
+
+        // Measure execution time? Maybe we can get some optimizations in the future.
+        let subregions_used = pam_size as u32/region_len * 8 + 1;
+        let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+
+        // TODO: Do we need this check, or is function only called on actual updating? Memory already expanded enough
+        if subregion_mask = old_subregion_mask {
+            return None;
+        } 
+        else {
+            let region_config = RegionConfig::new(region_start, region_len_value, PAM_REGION_NUM as u32, Some(subregion_mask), permissions);    
+        }
+        // 
         Err(())
     }
 
-    fn expose_memory_buffer(
+    fn expose_memory_region(
         &self,
         parent_start: *const u8,
         parent_size: usize,
-        min_buffer_size: usize,
+        min_region_size: usize,
         permissions: Permissions,
         config: &mut Self::MpuConfig
     ) -> Option<(*const u8, usize)>  {
@@ -322,12 +345,12 @@ impl kernel::mpu::MPU for MPU {
         }
 
         // TODO
-        if parent_size != min_buffer_size {
+        if parent_size != min_region_size {
             unimplemented!("Flexible region requests not yet implemented");
         }
         
         let start = parent_start as usize;
-        let len = min_buffer_size;
+        let len = min_region_size;
 
         // There are two possibilities we support:
         //

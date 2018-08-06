@@ -512,7 +512,7 @@ impl Process<'a> {
         let flash_len = self.flash.len();
 
         // Flash region
-        match mpu.expose_memory_buffer(
+        match mpu.expose_memory_region(
             flash_start, 
             flash_len,
             flash_len, 
@@ -527,7 +527,7 @@ impl Process<'a> {
         let memory_len = self.memory.len();
 
         // Memory region
-        match mpu.expose_memory_buffer(
+        match mpu.expose_memory_region(
             memory_start,
             memory_len,
             memory_len,
@@ -553,7 +553,7 @@ impl Process<'a> {
         };
 
         // Grant region
-        match mpu.expose_memory_buffer(
+        match mpu.expose_memory_region(
             grant_start,
             grant_len,
             grant_len,
@@ -570,7 +570,7 @@ impl Process<'a> {
                 let ipc_start = region.get().0;
                 let ipc_len = region.get().1.as_num::<u32>() as usize;
 
-                match mpu.expose_memory_buffer(
+                match mpu.expose_memory_region(
                     ipc_start,
                     ipc_len,
                     ipc_len,
