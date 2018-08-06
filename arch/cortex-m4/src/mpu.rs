@@ -120,7 +120,7 @@ const MPU_BASE_ADDRESS: StaticRef<MpuRegisters> =
     unsafe { StaticRef::new(0xE000ED90 as *const MpuRegisters) };
 
 /// Constructor field is private to limit who can create a new MPU
-pub struct MPU(StaticRef<MpuRegisters>, MapCell<Option<RegionConfig>>);
+pub struct MPU(StaticRef<MpuRegisters>, MapCell<Option<CortexMConfig>>);
 
 impl MPU {
     pub const unsafe fn new() -> MPU {
@@ -130,23 +130,26 @@ impl MPU {
 
 #[derive(Copy, Clone)]
 pub struct CortexMConfig {
-    _pam_start: Option<*const u8>,
-    _pam_end: Option<usize>,
-    _pam_permissions: Option<Permissions>,
-    _pam_region: Option<RegionConfig>,
+    pam_region: Option<PAMRegionInfo>,
     regions: [Option<RegionConfig>; 7],
 }
 
 impl Default for CortexMConfig {
     fn default() -> CortexMConfig {
         CortexMConfig {
-            _pam_start: None,
-            _pam_end: None,
-            _pam_permissions: None,
-            _pam_region: None,
+            pam_region: None,
             regions: [None; 7],
         }
     }
+}
+
+#[derive(Copy, Clone)]
+pub struct PAMRegionInfo {
+    base_address: u32,
+    size: u32,
+    permissions: Permissions,
+    num_subregions_used: u32,
+    region: RegionConfig,
 }
 
 #[derive(Copy, Clone)]
@@ -287,8 +290,23 @@ impl kernel::mpu::MPU for MPU {
 
         let region_config = RegionConfig::new(region_start, region_len_value, PAM_REGION_NUM as u32, Some(subregion_mask), permissions);
 
-        // TODO: put this in config
-        self.1.replace(Some(region_config));
+        // TODO: do this in config
+        let cortexm_config = Default::default();
+        self.1.replace(Some(cortexm_config));
+
+        self.1.map(|config| {
+            if let Some(cortexm_config) = config {
+                let pam_region = PAMRegionInfo {
+                    base_address: region_start,
+                    size: region_len,
+                    permissions: permissions,
+                    num_subregions_used: subregions_used,
+                    region: region_config,
+                };
+
+                cortexm_config.pam_region = Some(pam_region);
+            }
+        });
 
         None
     }
@@ -501,9 +519,14 @@ impl kernel::mpu::MPU for MPU {
 
         // Set PAM region
         // TODO: use config for this
-        self.1.map(|region| {
-            let region_config = match region {
-                Some(region_config) => region_config.clone(),
+        self.1.map(|config| {
+            let region_config = match config {
+                Some(cortexm_config) => {
+                    match cortexm_config.pam_region {
+                        Some(pam_region) => pam_region.region,
+                        None => RegionConfig::empty(PAM_REGION_NUM as u32),
+                    }
+                },
                 None => RegionConfig::empty(PAM_REGION_NUM as u32),
             };
 
