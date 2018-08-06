@@ -23,43 +23,43 @@ pub trait MPU {
     fn number_total_regions(&self) -> usize {
         8
     }
-    
+
     /// Chooses the location for a process's memory, and sets up
     /// an MPU region to expose the process-owned portion.
     ///
-    /// The implementor must allocate a memory region for the process that is at 
-    /// least `min_process_ram_size` bytes in size and lies completely within the 
+    /// The implementor must allocate a memory region for the process that is at
+    /// least `min_process_ram_size` bytes in size and lies completely within the
     /// specified parent region. It must also allocate an MPU region covering the first
-    /// `initial_pam_size` bytes at the beginning of this parent memory region, 
-    /// with the specified permissions, and store the region in the `config` variable. 
+    /// `initial_pam_size` bytes at the beginning of this parent memory region,
+    /// with the specified permissions, and store the region in the `config` variable.
     /// This MPU region must not intersect the last `initial_grant_size` bytes of the
     /// total memory region.
     ///
     /// # Arguments
     ///
-    /// `parent_start`          : start of the parent region 
+    /// `parent_start`          : start of the parent region
     /// `parent_size`           : size of the parent region
     /// `min_app_ram_size`      : minimum ram size to allocate for process
     /// `initial_pam_size`      : initial size for the PAM (process acessible memory)
     /// `initial_grant_size`    : initial size for the process grant
     /// `permissions`           : permissions for the PAM MPU region
-    /// `config`                : MPU region configuration 
+    /// `config`                : MPU region configuration
     ///
     /// # Return Value
     ///
-    /// This function returns the start address and the size of the memory 
+    /// This function returns the start address and the size of the memory
     /// allocated for the process. If it is infeasible to allocate the memory or the MPU
     /// region, or if the function has been previously called, returns None.
     #[allow(unused_variables)]
     fn setup_process_memory_layout(
-        &self, 
+        &self,
         parent_start: *const u8,
         parent_size: usize,
         min_app_ram_size: usize,
         initial_pam_size: usize,
         initial_grant_size: usize,
         permissions: Permissions,
-        config: &mut Self::MpuConfig
+        config: &mut Self::MpuConfig,
     ) -> Option<(*const u8, usize)> {
         let app_ram_size = if min_app_ram_size < initial_pam_size + initial_grant_size {
             initial_pam_size + initial_grant_size
@@ -73,20 +73,20 @@ pub trait MPU {
         }
     }
 
-    /// Updates the MPU region for PAM to reflect any change in the app memory 
+    /// Updates the MPU region for PAM to reflect any change in the app memory
     /// and/or kernel memory breaks.
     ///
-    /// The implementor must update the PAM MPU region stored in `config` to extend 
+    /// The implementor must update the PAM MPU region stored in `config` to extend
     /// past `app_memory_break`, but not past `kernel_memory_break`.
     ///
     /// # Arguments
-    /// 
-    /// `app_memory_break`      : new address for the end of PAM 
+    ///
+    /// `app_memory_break`      : new address for the end of PAM
     /// `kernel_memory_break`   : new address for the start of grant
-    /// `config`                : MPU region configuration 
+    /// `config`                : MPU region configuration
     ///
     /// # Return Value
-    /// 
+    ///
     /// Returns an error if it is infeasible to update the PAM MPU region, or if it was
     /// never created.
     #[allow(unused_variables)]
@@ -94,7 +94,7 @@ pub trait MPU {
         &self,
         app_memory_break: *const u8,
         kernel_memory_break: *const u8,
-        config: &mut Self::MpuConfig
+        config: &mut Self::MpuConfig,
     ) -> Result<(), ()> {
         if (app_memory_break as usize) > (kernel_memory_break as usize) {
             Err(())
@@ -111,11 +111,11 @@ pub trait MPU {
     ///
     /// # Arguments
     ///
-    /// `lower_bound`       : lower bound address for the region 
-    /// `upper_bound`       : upper bound address for the region 
+    /// `lower_bound`       : lower bound address for the region
+    /// `upper_bound`       : upper bound address for the region
     /// `min_region_size`   : minimum size of the region
     /// `permissions`       : permissions for the MPU region
-    /// `config`            : MPU region configuration 
+    /// `config`            : MPU region configuration
     ///
     /// # Return Value
     ///
@@ -128,7 +128,7 @@ pub trait MPU {
         parent_size: usize,
         min_region_size: usize,
         permissions: Permissions,
-        config: &mut Self::MpuConfig
+        config: &mut Self::MpuConfig,
     ) -> Option<(*const u8, usize)> {
         if min_region_size > parent_size {
             None
@@ -141,7 +141,7 @@ pub trait MPU {
     ///
     /// # Arguments
     ///
-    /// `config`    : MPU region configuration 
+    /// `config`    : MPU region configuration
     #[allow(unused_variables)]
     fn configure_mpu(&self, config: &Self::MpuConfig) {}
 }

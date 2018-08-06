@@ -513,9 +513,9 @@ impl Process<'a> {
 
         // Flash region
         match mpu.expose_memory_region(
-            flash_start, 
+            flash_start,
             flash_len,
-            flash_len, 
+            flash_len,
             mpu::Permissions::ReadExecuteOnly,
             &mut config,
         ) {
