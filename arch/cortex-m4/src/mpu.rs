@@ -203,15 +203,19 @@ impl RegionConfig {
             ), // TODO
         };
 
+        let address = RegionBaseAddress::ADDR.val(base_address);
+        let valid = RegionBaseAddress::VALID::UseRBAR;
+        let regionnum = RegionBaseAddress::REGION.val(region_num);
+        
         let base_address = RegionBaseAddress::ADDR.val(base_address)
             + RegionBaseAddress::VALID::UseRBAR
             + RegionBaseAddress::REGION.val(region_num);
-
+        
         let mut attributes = RegionAttributes::ENABLE::SET
             + RegionAttributes::SIZE.val(size)
             + access_value
             + execute_value;
-
+        
         // Subregions enabled
         if let Some(value) = subregion_mask {
             attributes += RegionAttributes::SRD.val(value);
@@ -273,10 +277,17 @@ impl kernel::mpu::MPU for MPU {
             min_app_ram_size
         };
 
+        debug!("Min app ram size: {}", min_app_ram_size);
+        debug!("Initial PAM size: {}", initial_pam_size);
+        debug!("Initial grant size: {}", initial_grant_size);
+        debug!("App ram size: {}", app_ram_size);
+
         // We'll go through this code with some numeric examples, and
         // indicate this by EX.
         let mut region_len = math::closest_power_of_two(app_ram_size as u32);
         let mut exponent = math::log_base_two(region_len);
+
+        debug!("Region len: {}", region_len);
 
         if exponent < 7 {
             // Region sizes must be 128 Bytes or larger in order to support subregions
@@ -287,6 +298,8 @@ impl kernel::mpu::MPU for MPU {
             debug!("Region sizes too big");
             return None;
         }
+        
+        debug!("Region len: {}", region_len);
 
         // Preferably, the start of the region is equal to the lower bound
         let mut region_start = parent_start as u32;
@@ -302,6 +315,10 @@ impl kernel::mpu::MPU for MPU {
             debug!("Requested region doesn't fit in memory");
             return None;
         }
+        
+        debug!("Parent start: {:#X}", parent_start as usize);
+        debug!("Region start: {:#X}", region_start);
+        debug!("Region len: {}", region_len);
 
         // The memory initially allocated for the PAM will be aligned to an eigth of the total region length.
         // This allows Cortex-M subregions to control the growth of the PAM/grant in a more linear way.
@@ -312,8 +329,14 @@ impl kernel::mpu::MPU for MPU {
 
         // EX: 00001111 & 11111111 = 00001111 --> Use the first four subregions (0 = enable)
         let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+        //let subregion_mask = 0;
+        //
+        debug!("Subregions used: {}", subregions_used);
+        debug!("Subregions mask: {:#b}", subregion_mask);
 
         let region_len_value = exponent - 1;
+
+        debug!("Exponent: {}", exponent);
 
         let region_config = RegionConfig::new(
             region_start,
@@ -323,25 +346,30 @@ impl kernel::mpu::MPU for MPU {
             permissions,
         );
 
+        debug!("Region base_address: {:#b}", region_config.base_address.mask());
+        debug!("Region attributes: {:#b}", region_config.attributes.mask());
+
         // TODO: do this in config
         let cortexm_config = Default::default();
         self.1.replace(Some(cortexm_config));
 
         self.1.map(|config| {
-            if let Some(cortexm_config) = config {
-                let pam_region = PAMRegionInfo {
-                    base_address: region_start,
-                    size: region_len,
-                    permissions: permissions,
-                    num_subregions_used: subregions_used,
-                    region: region_config,
-                };
-
-                cortexm_config.pam_region = Some(pam_region);
+            match config {
+                Some(cortexm_config) => {
+                    let pam_region = PAMRegionInfo {
+                        base_address: region_start,
+                        size: region_len,
+                        permissions: permissions,
+                        num_subregions_used: subregions_used,
+                        region: region_config,
+                    };
+                    cortexm_config.pam_region = Some(pam_region);
+                },
+                None => panic!("WHAT?!"),
             }
         });
 
-        Some((region_start as *const u8, region_len))
+        Some((region_start as *const u8, region_len as usize))
     }
 
     fn update_process_memory_layout(
@@ -386,6 +414,8 @@ impl kernel::mpu::MPU for MPU {
         // TODO: Measure execution time of these operations. Maybe we can get some optimizations in the future.
         let new_subregions_used = pam_size as u32 / region_len * 8 + 1;
 
+        Ok(())
+            /*
         if num_subregions_used == new_subregions_used {
             return Ok(());
         } else {
@@ -419,6 +449,7 @@ impl kernel::mpu::MPU for MPU {
             });
             Ok(())
         }
+        */
     }
 
     fn expose_memory_region(
