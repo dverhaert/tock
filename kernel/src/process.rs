@@ -50,8 +50,9 @@ crate static mut PROCS: &'static mut [Option<&mut Process<'static>>] = &mut [];
 /// number of processes are created, with process structures placed in the
 /// provided array. How process faults are handled by the kernel is also
 /// selected.
-pub unsafe fn load_processes(
+pub unsafe fn load_processes<M: mpu::MPU>(
     kernel: &'static Kernel,
+    mpu: &M,
     start_of_flash: *const u8,
     app_memory: &mut [u8],
     procs: &mut [Option<&mut Process<'static>>],
@@ -63,6 +64,7 @@ pub unsafe fn load_processes(
     for i in 0..procs.len() {
         let (process, flash_offset, memory_offset) = Process::create(
             kernel,
+            mpu,
             apps_in_flash_ptr,
             app_memory_ptr,
             app_memory_size,
@@ -605,8 +607,9 @@ impl Process<'a> {
         return false;
     }
 
-    crate unsafe fn create(
+    crate unsafe fn create<M: mpu::MPU>(
         kernel: &'static Kernel,
+        mpu: &M,
         app_flash_address: *const u8,
         remaining_app_memory: *mut u8,
         remaining_app_memory_size: usize,
@@ -622,14 +625,10 @@ impl Process<'a> {
             }
 
             // Otherwise, actually load the app.
-            let mut min_app_ram_size = tbf_header.get_minimum_app_ram_size();
+            let mut min_app_ram_size = tbf_header.get_minimum_app_ram_size() as usize;
             let package_name = tbf_header.get_package_name(app_flash_address);
             let init_fn =
                 app_flash_address.offset(tbf_header.get_init_function_offset() as isize) as usize;
-
-            // Set the initial process stack and memory to 128 bytes.
-            let initial_stack_pointer = remaining_app_memory.offset(128);
-            let initial_sbrk_pointer = remaining_app_memory.offset(128);
 
             // First determine how much space we need in the application's
             // memory space just for kernel and grant state. We need to make
@@ -648,29 +647,46 @@ impl Process<'a> {
             // Make room to store this process's metadata.
             let process_struct_offset = mem::size_of::<Process>();
 
+            let initial_grant_size = grant_ptrs_offset + callbacks_offset + process_struct_offset;
+            let initial_pam_size = 128;
+
             // Need to make sure that the amount of memory we allocate for
             // this process at least covers this state.
-            if min_app_ram_size
-                < (grant_ptrs_offset + callbacks_offset + process_struct_offset) as u32
-            {
-                min_app_ram_size =
-                    (grant_ptrs_offset + callbacks_offset + process_struct_offset) as u32;
+            if min_app_ram_size < initial_pam_size + initial_grant_size {
+                min_app_ram_size = initial_pam_size + initial_grant_size; 
             }
 
-            // TODO round app_ram_size up to a closer MPU unit.
-            // This is a very conservative approach that rounds up to power of
-            // two. We should be able to make this closer to what we actually need.
-            let app_ram_size = math::closest_power_of_two(min_app_ram_size) as usize;
+            let mut config: M::MpuConfig = Default::default();
+
+            // Set up MPU region for PAM
+            let (memory_start, memory_size) = match mpu.setup_process_memory_layout(
+                remaining_app_memory as *const u8,
+                remaining_app_memory_size,
+                min_app_ram_size,
+                initial_pam_size,
+                initial_grant_size,
+                mpu::Permissions::ReadWriteExecute,
+                &mut config,
+            ) {
+                Some((memory_start, memory_size)) => (memory_start, memory_size),
+                None => panic!("Failed setting up process memory layout.")
+            };
+
+            let memory_start = memory_start as *mut u8;
 
             // Check that we can actually give this app this much memory.
-            if app_ram_size > remaining_app_memory_size {
+            if memory_size > remaining_app_memory_size {
                 panic!(
                     "{:?} failed to load. Insufficient memory. Requested {} have {}",
-                    package_name, app_ram_size, remaining_app_memory_size
+                    package_name, memory_size, remaining_app_memory_size
                 );
             }
 
-            let app_memory = slice::from_raw_parts_mut(remaining_app_memory, app_ram_size);
+            let app_memory = slice::from_raw_parts_mut(memory_start, memory_size);
+                
+            // Set the initial process stack and memory to 128 bytes.
+            let initial_stack_pointer = memory_start.offset(initial_pam_size as isize);
+            let initial_sbrk_pointer = memory_start.offset(initial_pam_size as isize);
 
             // Set up initial grant region.
             let mut kernel_memory_break = app_memory.as_mut_ptr().offset(app_memory.len() as isize);
@@ -772,7 +788,7 @@ impl Process<'a> {
 
             kernel.increment_work();
 
-            return (Some(process), app_flash_size, app_ram_size);
+            return (Some(process), app_flash_size, memory_size);
         }
         (None, 0, 0)
     }

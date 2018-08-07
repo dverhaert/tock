@@ -22,6 +22,7 @@ use kernel::hil;
 use kernel::hil::spi::SpiMaster;
 use kernel::hil::Controller;
 use kernel::Platform;
+use kernel::Chip;
 
 /// Support routines for debugging I/O.
 ///
@@ -496,6 +497,7 @@ pub unsafe fn reset_handler() {
 
     kernel::procs::load_processes(
         board_kernel,
+        chip.mpu(),
         &_sapps as *const u8,
         &mut APP_MEMORY,
         &mut PROCESSES,
