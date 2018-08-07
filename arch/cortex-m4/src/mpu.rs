@@ -348,9 +348,7 @@ impl kernel::mpu::MPU for MPU {
         new_kernel_memory_break: *const u8,
         _config: &mut Self::MpuConfig,
     ) -> Result<(), ()> {
-        // get old memory region data from somewhere, let's see how we get this
-
-        //
+        // TODO: Use implementation from #1113
         let mut region_start = 0;
         let mut region_len = 0;
         let mut permissions = Permissions::ReadWriteExecute;
@@ -389,8 +387,10 @@ impl kernel::mpu::MPU for MPU {
         if num_subregions_used == new_subregions_used {
             return Ok(());
         } else {
-            let subregion_mask = (0..new_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff; // Recompute the exponent so we can pass it back into the region config
-                                                                                                     // TODO: Move calculation of of region_len_value in Region create function
+            let subregion_mask = (0..new_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff; 
+
+            // Recompute the exponent so we can pass it back into the region config
+            // TODO: Move calculation of of region_len_value in Region create function
             let region_len_poweroftwo = PowerOfTwo::ceiling(region_len as u32);
             let exponent = region_len_poweroftwo.exp::<u32>();
             let region_len_value = exponent - 1;
