@@ -62,7 +62,7 @@ pub unsafe fn load_processes<M: mpu::MPU>(
     let mut app_memory_ptr = app_memory.as_mut_ptr();
     let mut app_memory_size = app_memory.len();
     for i in 0..procs.len() {
-        let (process, flash_offset, memory_offset) = Process::create(
+        let (process, flash_offset, memory_offset, memory_padding_offset) = Process::create(
             kernel,
             mpu,
             apps_in_flash_ptr,
@@ -83,9 +83,11 @@ pub unsafe fn load_processes<M: mpu::MPU>(
             procs[i] = process;
         }
 
+        let total_memory_offset = memory_offset + memory_padding_offset;
+
         apps_in_flash_ptr = apps_in_flash_ptr.offset(flash_offset as isize);
-        app_memory_ptr = app_memory_ptr.offset(memory_offset as isize);
-        app_memory_size -= memory_offset;
+        app_memory_ptr = app_memory_ptr.offset(total_memory_offset as isize);
+        app_memory_size -= total_memory_offset;
     }
 }
 
@@ -581,14 +583,14 @@ impl Process<'a> {
         remaining_app_memory: *mut u8,
         remaining_app_memory_size: usize,
         fault_response: FaultResponse,
-    ) -> (Option<&'static mut Process<'a>>, usize, usize) {
+    ) -> (Option<&'static mut Process<'a>>, usize, usize, usize) {
         if let Some(tbf_header) = tbfheader::parse_and_validate_tbf_header(app_flash_address) {
             let app_flash_size = tbf_header.get_total_size() as usize;
 
             // If this isn't an app (i.e. it is padding) or it is an app but it
             // isn't enabled, then we can skip it but increment past its flash.
             if !tbf_header.is_app() || !tbf_header.enabled() {
-                return (None, app_flash_size, 0);
+                return (None, app_flash_size, 0, 0);
             }
 
             // Otherwise, actually load the app.
@@ -639,8 +641,6 @@ impl Process<'a> {
                 None => panic!("Failed setting up process memory layout.")
             };
 
-            let memory_start = memory_start as *mut u8;
-
             // Check that we can actually give this app this much memory.
             if memory_size > remaining_app_memory_size {
                 panic!(
@@ -648,8 +648,12 @@ impl Process<'a> {
                     package_name, memory_size, remaining_app_memory_size
                 );
             }
+            
+            // Compute how much padding before start of process memory
+            let memory_padding_size = (memory_start as usize) - (remaining_app_memory as usize);
 
-            let app_memory = slice::from_raw_parts_mut(memory_start, memory_size);
+            // Set up process memory
+            let app_memory = slice::from_raw_parts_mut(memory_start as *mut u8, memory_size);
                 
             // Set the initial process stack and memory to 128 bytes.
             let initial_stack_pointer = memory_start.offset(initial_pam_size as isize);
@@ -755,9 +759,9 @@ impl Process<'a> {
 
             kernel.increment_work();
 
-            return (Some(process), app_flash_size, memory_size);
+            return (Some(process), app_flash_size, memory_size, memory_padding_size);
         }
-        (None, 0, 0)
+        (None, 0, 0, 0)
     }
 
     crate fn sbrk(&self, increment: isize) -> Result<*const u8, Error> {
