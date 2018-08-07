@@ -284,6 +284,7 @@ impl kernel::mpu::MPU for MPU {
             region_len = 128;
         } else if exponent > 32 {
             // Region sizes must be 4GB or smaller
+            debug!("Region sizes too big");
             return None;
         }
 
@@ -298,6 +299,7 @@ impl kernel::mpu::MPU for MPU {
         // Make sure that the requested region fits in memory
         let upper_bound = parent_start as u32 + parent_size as u32;
         if region_start + region_len > upper_bound {
+            debug!("Requested region doesn't fit in memory");
             return None;
         }
 
@@ -339,7 +341,7 @@ impl kernel::mpu::MPU for MPU {
             }
         });
 
-        None
+        Some((region_start as *const u8, region_len))
     }
 
     fn update_process_memory_layout(
