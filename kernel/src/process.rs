@@ -640,7 +640,7 @@ impl Process<'a> {
                 Some((memory_start, memory_size)) => (memory_start, memory_size),
                 None => panic!("Failed setting up process memory layout."),
             };
-            
+
             // Compute how much padding before start of process memory
             let memory_padding_size = (memory_start as usize) - (remaining_app_memory as usize);
 
@@ -648,13 +648,15 @@ impl Process<'a> {
             if memory_size + memory_padding_size > remaining_app_memory_size {
                 panic!(
                     "{:?} failed to load. Insufficient memory. Requested {} have {}",
-                    package_name, memory_size + memory_padding_size, remaining_app_memory_size
+                    package_name,
+                    memory_size + memory_padding_size,
+                    remaining_app_memory_size
                 );
             }
 
             // Set up process memory
             let app_memory = slice::from_raw_parts_mut(memory_start as *mut u8, memory_size);
-                
+
             // Set the initial process stack and memory to 128 bytes.
             let initial_stack_pointer = memory_start.offset(initial_pam_size as isize);
             let initial_sbrk_pointer = memory_start.offset(initial_pam_size as isize);
@@ -759,7 +761,12 @@ impl Process<'a> {
 
             kernel.increment_work();
 
-            return (Some(process), app_flash_size, memory_size, memory_padding_size);
+            return (
+                Some(process),
+                app_flash_size,
+                memory_size,
+                memory_padding_size,
+            );
         }
         (None, 0, 0, 0)
     }
