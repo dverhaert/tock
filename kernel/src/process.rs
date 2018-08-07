@@ -640,17 +640,17 @@ impl Process<'a> {
                 Some((memory_start, memory_size)) => (memory_start, memory_size),
                 None => panic!("Failed setting up process memory layout."),
             };
-
-            // Check that we can actually give this app this much memory.
-            if memory_size > remaining_app_memory_size {
-                panic!(
-                    "{:?} failed to load. Insufficient memory. Requested {} have {}",
-                    package_name, memory_size, remaining_app_memory_size
-                );
-            }
             
             // Compute how much padding before start of process memory
             let memory_padding_size = (memory_start as usize) - (remaining_app_memory as usize);
+
+            // Check that we can actually give this app this much memory.
+            if memory_size + memory_padding_size > remaining_app_memory_size {
+                panic!(
+                    "{:?} failed to load. Insufficient memory. Requested {} have {}",
+                    package_name, memory_size + memory_padding_size, remaining_app_memory_size
+                );
+            }
 
             // Set up process memory
             let app_memory = slice::from_raw_parts_mut(memory_start as *mut u8, memory_size);
