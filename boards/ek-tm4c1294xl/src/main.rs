@@ -14,6 +14,7 @@ extern crate tm4c129x;
 use capsules::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use kernel::hil;
 use kernel::hil::Controller;
+use kernel::Chip;
 use kernel::Platform;
 
 #[macro_use]
@@ -209,6 +210,7 @@ pub unsafe fn reset_handler() {
     }
     kernel::procs::load_processes(
         board_kernel,
+        chip.mpu(),
         &_sapps as *const u8,
         &mut APP_MEMORY,
         &mut PROCESSES,

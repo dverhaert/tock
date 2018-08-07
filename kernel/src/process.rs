@@ -622,7 +622,7 @@ impl Process<'a> {
             // Need to make sure that the amount of memory we allocate for
             // this process at least covers this state.
             if min_app_ram_size < initial_pam_size + initial_grant_size {
-                min_app_ram_size = initial_pam_size + initial_grant_size; 
+                min_app_ram_size = initial_pam_size + initial_grant_size;
             }
 
             let mut config: M::MpuConfig = Default::default();
@@ -638,7 +638,7 @@ impl Process<'a> {
                 &mut config,
             ) {
                 Some((memory_start, memory_size)) => (memory_start, memory_size),
-                None => panic!("Failed setting up process memory layout.")
+                None => panic!("Failed setting up process memory layout."),
             };
 
             // Check that we can actually give this app this much memory.
