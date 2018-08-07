@@ -2,9 +2,9 @@
 
 use kernel;
 use kernel::common::cells::MapCell;
-use kernel::common::registers::{FieldValue, ReadOnly, ReadWrite};
 use kernel::common::math;
 use kernel::common::math::PowerOfTwo;
+use kernel::common::registers::{FieldValue, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::mpu::Permissions;
 
@@ -140,7 +140,7 @@ impl Default for CortexMConfig {
     fn default() -> CortexMConfig {
         CortexMConfig {
             pam_region: None,
-            regions: [ 
+            regions: [
                 RegionConfig::empty(0),
                 RegionConfig::empty(1),
                 RegionConfig::empty(2),
@@ -275,8 +275,8 @@ impl kernel::mpu::MPU for MPU {
 
         // We'll go through this code with some numeric examples, and
         // indicate this by EX.
-        let mut region_len = math::closest_power_of_two(app_ram_size as u32); 
-        let mut exponent = math::log_base_two(region_len); 
+        let mut region_len = math::closest_power_of_two(app_ram_size as u32);
+        let mut exponent = math::log_base_two(region_len);
 
         if exponent < 7 {
             // Region sizes must be 128 Bytes or larger in order to support subregions
@@ -387,7 +387,7 @@ impl kernel::mpu::MPU for MPU {
         if num_subregions_used == new_subregions_used {
             return Ok(());
         } else {
-            let subregion_mask = (0..new_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff; 
+            let subregion_mask = (0..new_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
 
             // Recompute the exponent so we can pass it back into the region config
             // TODO: Move calculation of of region_len_value in Region create function

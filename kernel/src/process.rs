@@ -653,7 +653,7 @@ impl Process<'a> {
             // Need to make sure that the amount of memory we allocate for
             // this process at least covers this state.
             if min_app_ram_size < initial_pam_size + initial_grant_size {
-                min_app_ram_size = initial_pam_size + initial_grant_size; 
+                min_app_ram_size = initial_pam_size + initial_grant_size;
             }
 
             let mut config: M::MpuConfig = Default::default();
@@ -669,7 +669,7 @@ impl Process<'a> {
                 &mut config,
             ) {
                 Some((memory_start, memory_size)) => (memory_start, memory_size),
-                None => panic!("Failed setting up process memory layout.")
+                None => panic!("Failed setting up process memory layout."),
             };
 
             let memory_start = memory_start as *mut u8;
@@ -683,7 +683,7 @@ impl Process<'a> {
             }
 
             let app_memory = slice::from_raw_parts_mut(memory_start, memory_size);
-                
+
             // Set the initial process stack and memory to 128 bytes.
             let initial_stack_pointer = memory_start.offset(initial_pam_size as isize);
             let initial_sbrk_pointer = memory_start.offset(initial_pam_size as isize);

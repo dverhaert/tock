@@ -14,8 +14,8 @@ extern crate tm4c129x;
 use capsules::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use kernel::hil;
 use kernel::hil::Controller;
-use kernel::Platform;
 use kernel::Chip;
+use kernel::Platform;
 
 #[macro_use]
 pub mod io;
