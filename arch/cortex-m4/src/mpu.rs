@@ -202,10 +202,6 @@ impl RegionConfig {
                 RegionAttributes::XN::Disable,
             ), // TODO
         };
-
-        let address = RegionBaseAddress::ADDR.val(base_address);
-        let valid = RegionBaseAddress::VALID::UseRBAR;
-        let regionnum = RegionBaseAddress::REGION.val(region_num);
         
         let base_address = RegionBaseAddress::ADDR.val(base_address)
             + RegionBaseAddress::VALID::UseRBAR
@@ -328,11 +324,10 @@ impl kernel::mpu::MPU for MPU {
         let subregions_used = initial_pam_size as u32 / region_len * 8 + 1;
 
         // EX: 00001111 & 11111111 = 00001111 --> Use the first four subregions (0 = enable)
-        let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+        //let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
         //let subregion_mask = 0;
         //
         debug!("Subregions used: {}", subregions_used);
-        debug!("Subregions mask: {:#b}", subregion_mask);
 
         let region_len_value = exponent - 1;
 
@@ -342,15 +337,13 @@ impl kernel::mpu::MPU for MPU {
             region_start,
             region_len_value,
             PAM_REGION_NUM as u32,
-            Some(subregion_mask),
+//            Some(subregion_mask),
+            None,
             permissions,
         );
 
-        debug!("Region base_address: {:#b}", region_config.base_address.mask());
-        debug!("Region attributes: {:#b}", region_config.attributes.mask());
-
         // TODO: do this in config
-        let cortexm_config = Default::default();
+        let cortexm_config: CortexMConfig = Default::default();
         self.1.replace(Some(cortexm_config));
 
         self.1.map(|config| {
@@ -471,6 +464,7 @@ impl kernel::mpu::MPU for MPU {
         if parent_size != min_region_size {
             unimplemented!("Flexible region requests not yet implemented");
         }
+
 
         let start = parent_start as usize;
         let len = min_region_size;
@@ -615,17 +609,26 @@ impl kernel::mpu::MPU for MPU {
 
         // Set PAM region
         // TODO: use config for this
+        /*
         self.1.map(|config| {
-            let region_config = match config {
-                Some(cortexm_config) => match cortexm_config.pam_region {
-                    Some(pam_region) => pam_region.region,
-                    None => RegionConfig::empty(PAM_REGION_NUM as u32),
-                },
-                None => RegionConfig::empty(PAM_REGION_NUM as u32),
-            };
+            match config {
+                Some(cortexm_config) => {
+                    debug!("Found cortexmconfig here");
+                    match cortexm_config.pam_region {
+                        Some(pam_region) => {
+                            let region_config = pam_region.region;  
+                            debug!("Found region here");
+                            regs.rbar.write(region_config.base_address);
+                            regs.rasr.write(region_config.attributes);
+                            debug!("Wrote PAM registers");
+                        },
+                        None => panic!("HUH!?")
 
-            regs.rbar.write(region_config.base_address);
-            regs.rasr.write(region_config.attributes);
+                    }
+                },
+                None => panic!("what?!")
+            }
         });
+        */
     }
 }
