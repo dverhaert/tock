@@ -525,45 +525,12 @@ impl Process<'a> {
             Some(_) => (),
         }
 
-        let memory_start = self.memory.as_ptr();
-        let memory_len = self.memory.len();
-
-        // Memory region
-        match mpu.expose_memory_region(
-            memory_start,
-            memory_len,
-            memory_len,
-            mpu::Permissions::ReadWriteExecute,
+        if let Err(()) = mpu.update_process_memory_layout(
+            self.app_break.get(),
+            self.kernel_memory_break.get(),
             &mut config,
         ) {
-            None => panic!("Unable to allocate memory MPU region"),
-            Some(_) => (),
-        }
-
-        let grant_len = unsafe {
-            math::PowerOfTwo::ceiling(
-                self.memory.as_ptr().offset(self.memory.len() as isize) as u32
-                    - (self.kernel_memory_break.get() as u32),
-            ).as_num::<u32>() as usize
-        };
-
-        let grant_start = unsafe {
-            self.memory
-                .as_ptr()
-                .offset(self.memory.len() as isize)
-                .offset(-(grant_len as isize))
-        };
-
-        // Grant region
-        match mpu.expose_memory_region(
-            grant_start,
-            grant_len,
-            grant_len,
-            mpu::Permissions::NoAccess,
-            &mut config,
-        ) {
-            None => panic!("Unable to allocate grant MPU region"),
-            Some(_) => (),
+            panic!("Unable to update PAM MPU region");
         }
 
         // IPC regions
