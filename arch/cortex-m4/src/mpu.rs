@@ -131,7 +131,8 @@ impl MPU {
 
 #[derive(Copy, Clone)]
 pub struct CortexMConfig {
-    pam_region: Option<PAMRegionInfo>,
+    memory_info: Option<ProcessMemoryInfo>,
+    pam_region: RegionConfig,
     regions: [RegionConfig; 7],
     num_regions_used: usize,
 }
@@ -139,7 +140,8 @@ pub struct CortexMConfig {
 impl Default for CortexMConfig {
     fn default() -> CortexMConfig {
         CortexMConfig {
-            pam_region: None,
+            memory_info: None,
+            pam_region: RegionConfig::empty(7),
             regions: [
                 RegionConfig::empty(0),
                 RegionConfig::empty(1),
@@ -155,12 +157,10 @@ impl Default for CortexMConfig {
 }
 
 #[derive(Copy, Clone)]
-pub struct PAMRegionInfo {
-    base_address: u32,
-    size: u32,
-    permissions: Permissions,
-    num_subregions_used: u32,
-    region: RegionConfig,
+pub struct ProcessMemoryInfo {
+    memory_start: *const u8, 
+    memory_size: usize,
+    pam_permissions: Permissions,
 }
 
 #[derive(Copy, Clone)]
@@ -354,14 +354,13 @@ impl kernel::mpu::MPU for MPU {
         self.1.map(|config| {
             match config {
                 Some(cortexm_config) => {
-                    let pam_region = PAMRegionInfo {
-                        base_address: region_start,
-                        size: region_len,
-                        permissions: permissions,
-                        num_subregions_used: subregions_used,
-                        region: region_config,
+                    let memory_info = ProcessMemoryInfo {
+                        memory_start: region_start as *const u8,
+                        memory_size: region_len as usize,
+                        pam_permissions: permissions,
                     };
-                    cortexm_config.pam_region = Some(pam_region);
+                    cortexm_config.memory_info = Some(memory_info);
+                    cortexm_config.pam_region = region_config;
                 },
                 None => panic!("WHAT?!"),
             }
@@ -380,21 +379,23 @@ impl kernel::mpu::MPU for MPU {
         let mut region_start = 0;
         let mut region_len = 0;
         let mut permissions = Permissions::ReadWriteExecute;
-        let mut num_subregions_used = 0;
 
         self.1.map(|config| {
-            if let Some(cortexm_config) = config {
-                match cortexm_config.pam_region {
-                    Some(pam_region) => {
-                        region_start = pam_region.base_address;
-                        region_len = pam_region.size;
-                        permissions = pam_region.permissions;
-                        num_subregions_used = pam_region.num_subregions_used;
-                    }
-                    None => {
-                        unimplemented!("");
-                    }
-                };
+            match config {
+                Some(cortexm_config) => {
+                    match cortexm_config.memory_info {
+                        Some(memory_info) => {
+                            region_start = memory_info.memory_start as u32;
+                            region_len = memory_info.memory_size as u32;
+                            permissions = memory_info.pam_permissions;
+                        },
+                        None => {
+                            // PAM was never set up
+                            unimplemented!("");
+                        }
+                    };
+                },
+                None => panic!("WHAT?!"),
             }
         });
 
@@ -414,42 +415,35 @@ impl kernel::mpu::MPU for MPU {
         }
 
         // TODO: Measure execution time of these operations. Maybe we can get some optimizations in the future.
-        let new_subregions_used = (pam_size * 8) as u32 / region_len + 1;
+        let num_subregions_used = (pam_size * 8) as u32 / region_len + 1;
 
         return Ok(()); // TODO
 
-        if num_subregions_used != new_subregions_used {
-            let subregion_mask = (0..new_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
-            //let subregion_mask = (0..8).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+        let subregion_mask = (0..num_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+        //let subregion_mask = (0..8).fold(!0, |res, i| res & !(1 << i)) & 0xff;
 
-            // Recompute the exponent so we can pass it back into the region config
-            // TODO: Move calculation of of region_len_value in Region create function
-            let region_len_poweroftwo = PowerOfTwo::ceiling(region_len as u32);
-            let exponent = region_len_poweroftwo.exp::<u32>();
-            let region_len_value = exponent - 1;
+        // Recompute the exponent so we can pass it back into the region config
+        // TODO: Move calculation of of region_len_value in Region create function
+        let region_len_poweroftwo = PowerOfTwo::ceiling(region_len as u32);
+        let exponent = region_len_poweroftwo.exp::<u32>();
+        let region_len_value = exponent - 1;
 
-            let region_config = RegionConfig::new(
-                region_start,
-                region_len_value,
-                PAM_REGION_NUM as u32,
-                Some(subregion_mask),
-                permissions,
-            );
+        let region_config = RegionConfig::new(
+            region_start,
+            region_len_value,
+            PAM_REGION_NUM as u32,
+            Some(subregion_mask),
+            permissions,
+        );
 
-            self.1.map(|config| {
-                if let Some(cortexm_config) = config {
-                    let pam_region = PAMRegionInfo {
-                        base_address: region_start,
-                        size: region_len,
-                        permissions: permissions,
-                        num_subregions_used: new_subregions_used,
-                        region: region_config,
-                    };
-                    cortexm_config.pam_region = Some(pam_region);
-                }
-            });
-        }
-        Ok(())
+        self.1.map(|config| {
+            match config {
+                Some(cortexm_config) => cortexm_config.pam_region = region_config,
+                None => panic!("WHAT?!"),
+            }
+        });
+        
+            Ok(())
     }
 
     fn expose_memory_region(
@@ -623,18 +617,9 @@ impl kernel::mpu::MPU for MPU {
         self.1.map(|config| {
             match config {
                 Some(cortexm_config) => {
-                    //debug!("Found cortexmconfig here");
-                    match cortexm_config.pam_region {
-                        Some(pam_region) => {
-                            let region_config = pam_region.region;  
-                            //debug!("Found region here");
-                            regs.rbar.write(region_config.base_address);
-                            regs.rasr.write(region_config.attributes);
-                            //debug!("Wrote PAM registers");
-                        },
-                        None => panic!("HUH!?")
-
-                    }
+                    let region_config = cortexm_config.pam_region;
+                    regs.rbar.write(region_config.base_address);
+                    regs.rasr.write(region_config.attributes);
                 },
                 None => panic!("what?!")
             }
