@@ -622,9 +622,6 @@ impl Process<'a> {
                 None => panic!("Failed setting up process memory layout."),
             };
 
-            debug!("Process.rs gets this memory_start: {:#X}", memory_start as usize);
-            debug!("Process.rs gets this memory_size: {}", memory_size);
-
             // Compute how much padding before start of process memory
             let memory_padding_size = (memory_start as usize) - (remaining_app_memory as usize);
 
