@@ -18,11 +18,11 @@ extern crate cortexm4;
 extern crate sam4l;
 
 mod components;
-
 use capsules::alarm::AlarmDriver;
 use capsules::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use capsules::virtual_i2c::MuxI2C;
 use capsules::virtual_spi::{MuxSpiMaster, VirtualSpiMasterDevice};
+use capsules::virtual_uart::{UartDevice, UartMux};
 use kernel::component::Component;
 use kernel::hil;
 use kernel::hil::radio;
@@ -76,6 +76,9 @@ mod aes_ccm_test;
 #[allow(dead_code)]
 mod power;
 
+#[allow(dead_code)]
+mod virtual_uart_rx_test;
+
 // State for loading apps.
 
 const NUM_PROCS: usize = 2;
@@ -86,8 +89,7 @@ const FAULT_RESPONSE: kernel::procs::FaultResponse = kernel::procs::FaultRespons
 #[link_section = ".app_memory"]
 static mut APP_MEMORY: [u8; 16384] = [0; 16384];
 
-static mut PROCESSES: [Option<&'static mut kernel::procs::Process<'static>>; NUM_PROCS] =
-    [None, None];
+static mut PROCESSES: [Option<&'static kernel::procs::Process<'static>>; NUM_PROCS] = [None, None];
 
 /// Dummy buffer that causes the linker to reserve enough space for the stack.
 #[no_mangle]
@@ -95,7 +97,7 @@ static mut PROCESSES: [Option<&'static mut kernel::procs::Process<'static>>; NUM
 pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 
 struct Imix {
-    console: &'static capsules::console::Console<'static, sam4l::usart::USART>,
+    console: &'static capsules::console::Console<'static, UartDevice<'static>>,
     gpio: &'static capsules::gpio::GPIO<'static, sam4l::gpio::GPIOPin>,
     alarm: &'static AlarmDriver<'static, VirtualMuxAlarm<'static, sam4l::ast::Ast<'static>>>,
     temp: &'static capsules::temperature::TemperatureSensor<'static>,
@@ -255,7 +257,22 @@ pub unsafe fn reset_handler() {
         trng: true,
     });
 
-    let console = ConsoleComponent::new(&sam4l::usart::USART3, 115200).finalize();
+    let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
+
+    // # CONSOLE
+    // Create a shared UART channel for the console and for kernel debug.
+    sam4l::usart::USART3.set_mode(sam4l::usart::UsartMode::Uart);
+    let uart_mux = static_init!(
+        UartMux<'static>,
+        UartMux::new(
+            &sam4l::usart::USART3,
+            &mut capsules::virtual_uart::RX_BUF,
+            115200
+        )
+    );
+    hil::uart::UART::set_client(&sam4l::usart::USART3, uart_mux);
+
+    let console = ConsoleComponent::new(board_kernel, uart_mux, 115200).finalize();
 
     // Allow processes to communicate over BLE through the nRF51822
     let nrf_serialization =
@@ -268,17 +285,17 @@ pub unsafe fn reset_handler() {
         MuxAlarm::new(&sam4l::ast::AST)
     );
     ast.configure(mux_alarm);
-    let alarm = AlarmDriverComponent::new(mux_alarm).finalize();
+    let alarm = AlarmDriverComponent::new(board_kernel, mux_alarm).finalize();
 
     // # I2C and I2C Sensors
     let mux_i2c = static_init!(MuxI2C<'static>, MuxI2C::new(&sam4l::i2c::I2C2));
     sam4l::i2c::I2C2.set_master_client(mux_i2c);
 
-    let ambient_light = AmbientLightComponent::new(mux_i2c, mux_alarm).finalize();
+    let ambient_light = AmbientLightComponent::new(board_kernel, mux_i2c, mux_alarm).finalize();
     let si7021 = SI7021Component::new(mux_i2c, mux_alarm).finalize();
-    let temp = TemperatureComponent::new(si7021).finalize();
-    let humidity = HumidityComponent::new(si7021).finalize();
-    let ninedof = NineDofComponent::new(mux_i2c, &sam4l::gpio::PC[13]).finalize();
+    let temp = TemperatureComponent::new(board_kernel, si7021).finalize();
+    let humidity = HumidityComponent::new(board_kernel, si7021).finalize();
+    let ninedof = NineDofComponent::new(board_kernel, mux_i2c, &sam4l::gpio::PC[13]).finalize();
 
     // SPI MUX, SPI syscall driver and RF233 radio
     let mux_spi = static_init!(
@@ -305,15 +322,15 @@ pub unsafe fn reset_handler() {
     let adc = AdcComponent::new().finalize();
     let gpio = GpioComponent::new().finalize();
     let led = LedComponent::new().finalize();
-    let button = ButtonComponent::new().finalize();
-    let crc = CrcComponent::new().finalize();
+    let button = ButtonComponent::new(board_kernel).finalize();
+    let crc = CrcComponent::new(board_kernel).finalize();
 
     // Can this initialize be pushed earlier, or into component? -pal
     rf233.initialize(&mut RF233_BUF, &mut RF233_REG_WRITE, &mut RF233_REG_READ);
-    let radio_driver = RadioComponent::new(rf233, 0xABCD, 0x1008).finalize();
+    let radio_driver = RadioComponent::new(board_kernel, rf233, 0xABCD, 0x1008).finalize();
 
-    let usb_driver = UsbComponent::new().finalize();
-    let nonvolatile_storage = NonvolatileStorageComponent::new().finalize();
+    let usb_driver = UsbComponent::new(board_kernel).finalize();
+    let nonvolatile_storage = NonvolatileStorageComponent::new(board_kernel).finalize();
 
     let imix = Imix {
         console: console,
@@ -327,7 +344,7 @@ pub unsafe fn reset_handler() {
         button: button,
         crc: crc,
         spi: spi_syscalls,
-        ipc: kernel::ipc::IPC::new(),
+        ipc: kernel::ipc::IPC::new(board_kernel),
         ninedof: ninedof,
         radio_driver: radio_driver,
         usb_driver: usb_driver,
@@ -346,9 +363,9 @@ pub unsafe fn reset_handler() {
     rf233.reset();
     rf233.start();
 
+    //    debug!("Starting virtual read test.");
+    //    virtual_uart_rx_test::run_virtual_uart_receive(uart_mux);
     debug!("Initialization complete. Entering main loop");
-
-    let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new());
 
     extern "C" {
         /// Beginning of the ROM region containing app images.
@@ -363,5 +380,5 @@ pub unsafe fn reset_handler() {
         FAULT_RESPONSE,
     );
 
-    board_kernel.kernel_loop(&imix, &mut chip, &mut PROCESSES, Some(&imix.ipc));
+    board_kernel.kernel_loop(&imix, &mut chip, Some(&imix.ipc));
 }
