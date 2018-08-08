@@ -321,9 +321,9 @@ impl kernel::mpu::MPU for MPU {
         // This allows Cortex-M subregions to control the growth of the PAM/grant in a more linear way.
         // The Cortex-M has a total of 8 subregions per region, which is why we can have precision in
         // eights of total region lengths.
-        // EX: subregions_used = 3500/8192 * 8 + 1 = 4;
+        // EX: subregions_used = (3500 * 8)/8192 + 1 = 4;
         let subregions_used = 8; //TODO
-        //let subregions_used = initial_pam_size as u32 / region_len * 8 + 1; //TODO: fix bug
+        //let subregions_used = (initial_pam_size * 8) as u32 / region_len + 1;
 
         // EX: 00001111 & 11111111 = 00001111 --> Use the first four subregions (0 = enable)
         let subregion_mask = 0; //TODO
@@ -414,7 +414,7 @@ impl kernel::mpu::MPU for MPU {
         }
 
         // TODO: Measure execution time of these operations. Maybe we can get some optimizations in the future.
-        let new_subregions_used = pam_size as u32 / region_len * 8 + 1;
+        let new_subregions_used = (pam_size * 8) as u32 / region_len + 1;
 
         return Ok(()); // TODO
 
