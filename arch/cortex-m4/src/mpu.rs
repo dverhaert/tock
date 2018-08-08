@@ -203,7 +203,8 @@ impl RegionConfig {
             ), // TODO
         };
         
-        let base_address = RegionBaseAddress::ADDR.val(base_address)
+        // Shift base address rightwards 
+        let base_address = RegionBaseAddress::ADDR.val(base_address >> 5)
             + RegionBaseAddress::VALID::UseRBAR
             + RegionBaseAddress::REGION.val(region_num);
         
@@ -273,17 +274,17 @@ impl kernel::mpu::MPU for MPU {
             min_app_ram_size
         };
 
-        debug!("Min app ram size: {}", min_app_ram_size);
-        debug!("Initial PAM size: {}", initial_pam_size);
-        debug!("Initial grant size: {}", initial_grant_size);
-        debug!("App ram size: {}", app_ram_size);
+        //debug!("Min app ram size: {}", min_app_ram_size);
+        //debug!("Initial PAM size: {}", initial_pam_size);
+        //debug!("Initial grant size: {}", initial_grant_size);
+        //debug!("App ram size: {}", app_ram_size);
 
         // We'll go through this code with some numeric examples, and
         // indicate this by EX.
         let mut region_len = math::closest_power_of_two(app_ram_size as u32);
         let mut exponent = math::log_base_two(region_len);
 
-        debug!("Region len: {}", region_len);
+        //debug!("Region len: {}", region_len);
 
         if exponent < 7 {
             // Region sizes must be 128 Bytes or larger in order to support subregions
@@ -295,7 +296,7 @@ impl kernel::mpu::MPU for MPU {
             return None;
         }
         
-        debug!("Region len: {}", region_len);
+        //debug!("Region len: {}", region_len);
 
         // Preferably, the start of the region is equal to the lower bound
         let mut region_start = parent_start as u32;
@@ -312,9 +313,9 @@ impl kernel::mpu::MPU for MPU {
             return None;
         }
         
-        debug!("Parent start: {:#X}", parent_start as usize);
-        debug!("Region start: {:#X}", region_start);
-        debug!("Region len: {}", region_len);
+        //debug!("Parent start: {:#X}", parent_start as usize);
+        //debug!("Region start: {:#X}", region_start);
+        //debug!("Region len: {}", region_len);
 
         // The memory initially allocated for the PAM will be aligned to an eigth of the total region length.
         // This allows Cortex-M subregions to control the growth of the PAM/grant in a more linear way.
@@ -327,20 +328,24 @@ impl kernel::mpu::MPU for MPU {
         //let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
         //let subregion_mask = 0;
         //
-        debug!("Subregions used: {}", subregions_used);
+        //debug!("Subregions used: {}", subregions_used);
 
         let region_len_value = exponent - 1;
 
-        debug!("Exponent: {}", exponent);
+        //debug!("Exponent: {}", exponent);
 
         let region_config = RegionConfig::new(
             region_start,
             region_len_value,
             PAM_REGION_NUM as u32,
-//            Some(subregion_mask),
+            // Some(subregion_mask),
             None,
             permissions,
         );
+
+        //debug!("Arg0: {:#b}", region_start);
+        //debug!("Arg1: {}", region_len_value);
+        //debug!("Arg2: {}", 1);
 
         // TODO: do this in config
         let cortexm_config: CortexMConfig = Default::default();
@@ -495,7 +500,7 @@ impl kernel::mpu::MPU for MPU {
                 return None;
             }
 
-            let address_value = (start >> 5) as u32;
+            let address_value = start as u32;
             let region_len_value = exponent - 1;
 
             let region_config = RegionConfig::new(
@@ -505,6 +510,10 @@ impl kernel::mpu::MPU for MPU {
                 None,
                 permissions,
             );
+        
+            //debug!("Arg0: {:#b}", address_value);
+            //debug!("Arg1: {}", region_len_value);
+            //debug!("Arg2: {}", region_num as u32);
 
             config.regions[region_num] = region_config;
             config.num_regions_used += 1;
@@ -580,7 +589,7 @@ impl kernel::mpu::MPU for MPU {
             let subregion_mask =
                 (min_subregion..(max_subregion + 1)).fold(!0, |res, i| res & !(1 << i)) & 0xff;
 
-            let address_value = (region_start >> 5) as u32;
+            let address_value = region_start as u32;
             let region_len_value = exponent - 1;
 
             let region_config = RegionConfig::new(
@@ -609,7 +618,6 @@ impl kernel::mpu::MPU for MPU {
 
         // Set PAM region
         // TODO: use config for this
-        /*
         self.1.map(|config| {
             match config {
                 Some(cortexm_config) => {
@@ -629,6 +637,5 @@ impl kernel::mpu::MPU for MPU {
                 None => panic!("what?!")
             }
         });
-        */
     }
 }

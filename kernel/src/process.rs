@@ -527,10 +527,10 @@ impl Process<'a> {
             Some(_) => (),
         }
 
+        /*
         let memory_start = self.memory.as_ptr();
         let memory_len = self.memory.len();
 
-        // Memory region
         match mpu.expose_memory_region(
             memory_start,
             memory_len,
@@ -541,9 +541,9 @@ impl Process<'a> {
             None => panic!("Unable to allocate memory MPU region"),
             Some(_) => (),
         }
+        */
 
 
-        /*
         if let Err(()) = mpu.update_process_memory_layout(
             self.app_break.get(),
             self.kernel_memory_break.get(),
@@ -551,7 +551,6 @@ impl Process<'a> {
         ) {
             panic!("Unable to update PAM MPU region");
         }
-        */
 
         // IPC regions
         for region in self.mpu_regions.iter() {
