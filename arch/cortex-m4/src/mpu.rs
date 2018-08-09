@@ -171,13 +171,13 @@ pub struct RegionConfig {
 
 impl RegionConfig {
     fn new(
-        base_address: u32,
+        address: u32,
         size: u32,
         region_num: u32,
         subregion_mask: Option<u32>,
         permissions: Permissions,
     ) -> RegionConfig {
-        let (access_value, execute_value) = match permissions {
+        let (access, execute) = match permissions {
             Permissions::ReadWriteExecute => (
                 RegionAttributes::AP::ReadWrite,
                 RegionAttributes::XN::Enable,
@@ -200,19 +200,19 @@ impl RegionConfig {
             ), 
         };
         
-        // Shift base address rightwards 
-        let base_address = RegionBaseAddress::ADDR.val(base_address >> 5)
+        // Address register field only takes the 27 MSB TODO
+        let base_address = RegionBaseAddress::ADDR.val(address >> 5)
             + RegionBaseAddress::VALID::UseRBAR
             + RegionBaseAddress::REGION.val(region_num);
         
         let mut attributes = RegionAttributes::ENABLE::SET
             + RegionAttributes::SIZE.val(size)
-            + access_value
-            + execute_value;
+            + access
+            + execute;
         
         // Subregions enabled
-        if let Some(value) = subregion_mask {
-            attributes += RegionAttributes::SRD.val(value);
+        if let Some(mask) = subregion_mask {
+            attributes += RegionAttributes::SRD.val(mask);
         }
 
         RegionConfig {
@@ -264,7 +264,7 @@ impl kernel::mpu::MPU for MPU {
         permissions: Permissions,
         _config: &mut Self::MpuConfig,
     ) -> Option<(*const u8, usize)> {
-        // If the user has not given enough memory, round up and fix.
+        // If the user has not specified enough memory for PAM and grant, round up and fix.
         let app_ram_size = if min_app_ram_size < initial_pam_size + initial_grant_size {
             initial_pam_size + initial_grant_size
         } else {
