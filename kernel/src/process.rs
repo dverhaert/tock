@@ -624,7 +624,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
         */
 
         // Set MPU regions
-        self.mpu_config.map(|config| { MPU::configure_mpu(&config) });
+        self.mpu_config.map(|config| { self.mpu.configure_mpu(&config) });
     }
 
     fn add_mpu_region(&self, base: *const u8, size: u32) -> bool {
