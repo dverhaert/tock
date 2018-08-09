@@ -8,11 +8,11 @@ use kernel::common::registers::{FieldValue, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::mpu::Permissions;
 
-#[repr(C)]
 /// MPU Registers for the Cortex-M4 family
 ///
 /// Described in section 4.5 of
 /// <http://infocenter.arm.com/help/topic/com.arm.doc.dui0553a/DUI0553A_cortex_m4_dgug.pdf>
+#[repr(C)]
 pub struct MpuRegisters {
     /// Indicates whether the MPU is present and, if so, how many regions it
     /// supports.
@@ -186,21 +186,18 @@ impl RegionConfig {
                 RegionAttributes::AP::ReadWrite,
                 RegionAttributes::XN::Disable,
             ),
-            Permissions::ReadExecuteOnly => {
-                (RegionAttributes::AP::ReadOnly, RegionAttributes::XN::Enable)
-            }
+            Permissions::ReadExecuteOnly => (
+                RegionAttributes::AP::ReadOnly, 
+                RegionAttributes::XN::Enable
+            ),
             Permissions::ReadOnly => (
                 RegionAttributes::AP::ReadOnly,
                 RegionAttributes::XN::Disable,
             ),
             Permissions::ExecuteOnly => (
-                RegionAttributes::AP::PrivilegedOnly,
+                RegionAttributes::AP::NoAccess,
                 RegionAttributes::XN::Enable,
-            ), // TODO
-            Permissions::NoAccess => (
-                RegionAttributes::AP::PrivilegedOnly,
-                RegionAttributes::XN::Disable,
-            ), // TODO
+            ), 
         };
         
         // Shift base address rightwards 

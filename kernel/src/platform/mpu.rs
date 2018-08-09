@@ -7,7 +7,6 @@ pub enum Permissions {
     ReadExecuteOnly,
     ReadOnly,
     ExecuteOnly,
-    NoAccess, // TODO: remove
 }
 
 pub trait MPU {
