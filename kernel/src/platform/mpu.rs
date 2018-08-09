@@ -142,7 +142,7 @@ pub trait MPU {
     ///
     /// `config`    : MPU region configuration
     #[allow(unused_variables)]
-    fn configure_mpu(&self, config: &Self::MpuConfig) {}
+    fn configure_mpu(config: &Self::MpuConfig) {}
 }
 
 /// Implement default MPU trait for unit.
