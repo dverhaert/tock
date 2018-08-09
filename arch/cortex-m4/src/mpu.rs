@@ -289,24 +289,24 @@ impl kernel::mpu::MPU for MPU {
             region_len = 128;
         } else if exponent > 32 {
             // Region sizes must be 4GB or smaller
-            debug!("Region sizes too big");
+            //debug!("Region sizes too big");
             return None;
         }
         
         //debug!("Region len: {}", region_len);
 
-        // Preferably, the start of the region is equal to the lower bound
+        // Preferably, the region will start at the start of the parent region 
         let mut region_start = parent_start as u32;
 
-        // If the start doesn't align to the length, move region forward until it does
+        // If the start doesn't align to the length, move region start up until it does
         if region_start % region_len != 0 {
-            region_start = region_start + region_len - (region_start % region_len);
+            region_start += region_len - (region_start % region_len);
         }
 
         // Make sure that the requested region fits in memory
-        let upper_bound = parent_start as u32 + parent_size as u32;
-        if region_start + region_len > upper_bound {
-            debug!("Requested region doesn't fit in memory");
+        let parent_end = (parent_start) as u32 + (parent_size as u32);
+        if region_start + region_len > parent_end {
+            //debug!("Requested region doesn't fit in memory");
             return None;
         }
         
@@ -328,13 +328,13 @@ impl kernel::mpu::MPU for MPU {
         
         //debug!("Subregions used: {}", subregions_used);
 
-        let region_len_value = exponent - 1;
+        let region_size = exponent - 1;
 
         //debug!("Exponent: {}", exponent);
 
         let region_config = RegionConfig::new(
             region_start,
-            region_len_value,
+            region_size,
             PAM_REGION_NUM as u32,
             Some(subregion_mask),
             permissions,
@@ -347,7 +347,6 @@ impl kernel::mpu::MPU for MPU {
         // TODO: do this in config
         let cortexm_config: CortexMConfig = Default::default();
         self.1.replace(Some(cortexm_config));
-
         self.1.map(|config| {
             match config {
                 Some(cortexm_config) => {
@@ -376,7 +375,6 @@ impl kernel::mpu::MPU for MPU {
         let mut region_start = 0;
         let mut region_len = 0;
         let mut permissions = Permissions::ReadWriteExecute;
-
         self.1.map(|config| {
             match config {
                 Some(cortexm_config) => {
@@ -401,33 +399,29 @@ impl kernel::mpu::MPU for MPU {
         //debug!("New new kernel memory break: {:#X}", new_kernel_memory_break as usize);
 
         // The PAM ends at new_app_memory_break, it's different from the region length.
-        let pam_end = new_app_memory_break as usize;
-        let grant_start = new_kernel_memory_break as usize;
-
-        let pam_size = pam_end - region_start as usize;
+        let pam_end = new_app_memory_break as u32;
+        let grant_start = new_kernel_memory_break as u32;
 
         if pam_end > grant_start {
             // Error: out of memory for the application. Please allocate more memory for your application.
             return Err(());
         }
+        
+        let pam_len = pam_end - region_start;
 
         // TODO: Measure execution time of these operations. Maybe we can get some optimizations in the future.
-        let num_subregions_used = (pam_size * 8) as u32 / region_len + 1;
+        let num_subregions_used = (pam_len * 8) as u32 / region_len + 1;
 
         return Ok(()); // TODO
 
         let subregion_mask = (0..num_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
         //let subregion_mask = (0..8).fold(!0, |res, i| res & !(1 << i)) & 0xff;
 
-        // Recompute the exponent so we can pass it back into the region config
-        // TODO: Move calculation of of region_len_value in Region create function
-        let region_len_poweroftwo = PowerOfTwo::ceiling(region_len as u32);
-        let exponent = region_len_poweroftwo.exp::<u32>();
-        let region_len_value = exponent - 1;
+        let region_size = math::log_base_two(region_len) - 1;
 
         let region_config = RegionConfig::new(
             region_start,
-            region_len_value,
+            region_size,
             PAM_REGION_NUM as u32,
             Some(subregion_mask),
             permissions,
@@ -440,7 +434,7 @@ impl kernel::mpu::MPU for MPU {
             }
         });
         
-            Ok(())
+        Ok(())
     }
 
     fn expose_memory_region(
