@@ -480,15 +480,14 @@ impl Process<'a> {
         let flash_len = self.flash.len();
 
         // Flash region
-        match mpu.expose_memory_region(
+        if let None = mpu.expose_memory_region(
             flash_start,
             flash_len,
             flash_len,
             mpu::Permissions::ReadExecuteOnly,
             &mut config,
         ) {
-            None => panic!("Unable to allocate flash MPU region"),
-            Some(_) => (),
+            panic!("Unable to allocate flash MPU region");
         }
 
         /*
@@ -522,15 +521,14 @@ impl Process<'a> {
                 let ipc_start = region.get().0;
                 let ipc_len = region.get().1.as_num::<u32>() as usize;
 
-                match mpu.expose_memory_region(
+                if let None = mpu.expose_memory_region(
                     ipc_start,
                     ipc_len,
                     ipc_len,
                     mpu::Permissions::ReadWriteExecute,
                     &mut config,
                 ) {
-                    None => panic!("Unable to allocate IPC MPU region"),
-                    Some(_) => (),
+                    panic!("Unable to allocate IPC MPU region");
                 }
             }
         }
