@@ -158,7 +158,7 @@ impl Default for CortexMConfig {
 
 #[derive(Copy, Clone)]
 pub struct ProcessMemoryInfo {
-    memory_start: *const u8, 
+    memory_start: *const u8,
     memory_size: usize,
     pam_permissions: Permissions,
 }
@@ -188,31 +188,27 @@ impl RegionConfig {
                 RegionAttributes::AP::ReadWrite,
                 RegionAttributes::XN::Disable,
             ),
-            Permissions::ReadExecuteOnly => (
-                RegionAttributes::AP::ReadOnly, 
-                RegionAttributes::XN::Enable
-            ),
+            Permissions::ReadExecuteOnly => {
+                (RegionAttributes::AP::ReadOnly, RegionAttributes::XN::Enable)
+            }
             Permissions::ReadOnly => (
                 RegionAttributes::AP::ReadOnly,
                 RegionAttributes::XN::Disable,
             ),
-            Permissions::ExecuteOnly => (
-                RegionAttributes::AP::NoAccess,
-                RegionAttributes::XN::Enable,
-            ), 
+            Permissions::ExecuteOnly => {
+                (RegionAttributes::AP::NoAccess, RegionAttributes::XN::Enable)
+            }
         };
-        
+
         // Address register field only takes the 27 MSB TODO
         let base_address = RegionBaseAddress::ADDR.val(address >> 5)
             + RegionBaseAddress::VALID::UseRBAR
             + RegionBaseAddress::REGION.val(region_num);
-        
+
         // Write region size and permissions
-        let mut attributes = RegionAttributes::ENABLE::SET
-            + RegionAttributes::SIZE.val(size)
-            + access
-            + execute;
-        
+        let mut attributes =
+            RegionAttributes::ENABLE::SET + RegionAttributes::SIZE.val(size) + access + execute;
+
         // If subregions enabled, write them to register
         if let Some(mask) = subregion_mask {
             attributes += RegionAttributes::SRD.val(mask);
@@ -295,10 +291,10 @@ impl kernel::mpu::MPU for MPU {
             // Region sizes must be 4GB or smaller
             return None;
         }
-        
+
         //debug!("Region len: {}", region_len);
 
-        // Preferably, the region will start at the start of the parent region 
+        // Preferably, the region will start at the start of the parent region
         let mut region_start = parent_start as u32;
 
         // If the start doesn't align to the length, move region start up until it does
@@ -312,7 +308,7 @@ impl kernel::mpu::MPU for MPU {
             //debug!("Requested region doesn't fit in memory");
             return None;
         }
-        
+
         //debug!("Parent start: {:#X}", parent_start as usize);
         //debug!("Region start: {:#X}", region_start);
         //debug!("Region len: {}", region_len);
@@ -322,13 +318,13 @@ impl kernel::mpu::MPU for MPU {
         // The Cortex-M has a total of 8 subregions per region, which is why we can have precision in
         // eights of total region lengths.
         // EX: subregions_used = (3500 * 8)/8192 + 1 = 4;
-        let subregions_used = 8; //TODO
-        //let subregions_used = (initial_pam_size * 8) as u32 / region_len + 1;
+        // TODO
+        // let subregions_used = (initial_pam_size * 8) as u32 / region_len + 1;
 
         // EX: 00001111 & 11111111 = 00001111 --> Use the first four subregions (0 = enable)
         let subregion_mask = 0; //TODO
-        //let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
-        
+                                //let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+
         //debug!("Subregions used: {}", subregions_used);
 
         let region_size = exponent - 1;
@@ -350,19 +346,17 @@ impl kernel::mpu::MPU for MPU {
         // TODO: do this in config
         let cortexm_config: CortexMConfig = Default::default();
         self.1.replace(Some(cortexm_config));
-        self.1.map(|config| {
-            match config {
-                Some(cortexm_config) => {
-                    let memory_info = ProcessMemoryInfo {
-                        memory_start: region_start as *const u8,
-                        memory_size: region_len as usize,
-                        pam_permissions: permissions,
-                    };
-                    cortexm_config.memory_info = Some(memory_info);
-                    cortexm_config.pam_region = region_config;
-                },
-                None => panic!("WHAT?!"),
+        self.1.map(|config| match config {
+            Some(cortexm_config) => {
+                let memory_info = ProcessMemoryInfo {
+                    memory_start: region_start as *const u8,
+                    memory_size: region_len as usize,
+                    pam_permissions: permissions,
+                };
+                cortexm_config.memory_info = Some(memory_info);
+                cortexm_config.pam_region = region_config;
             }
+            None => panic!("WHAT?!"),
         });
 
         Some((region_start as *const u8, region_len as usize))
@@ -386,13 +380,13 @@ impl kernel::mpu::MPU for MPU {
                             region_start = memory_info.memory_start as u32;
                             region_len = memory_info.memory_size as u32;
                             permissions = memory_info.pam_permissions;
-                        },
+                        }
                         None => {
                             // PAM was never set up
                             unimplemented!("");
                         }
                     };
-                },
+                }
                 None => panic!("WHAT?!"),
             }
         });
@@ -409,7 +403,7 @@ impl kernel::mpu::MPU for MPU {
             // Error: out of memory for the application. Please allocate more memory for your application.
             return Err(());
         }
-        
+
         let pam_len = pam_end - region_start;
 
         // TODO: Measure execution time of these operations. Maybe we can get some optimizations in the future.
@@ -430,13 +424,11 @@ impl kernel::mpu::MPU for MPU {
             permissions,
         );
 
-        self.1.map(|config| {
-            match config {
-                Some(cortexm_config) => cortexm_config.pam_region = region_config,
-                None => panic!("WHAT?!"),
-            }
+        self.1.map(|config| match config {
+            Some(cortexm_config) => cortexm_config.pam_region = region_config,
+            None => panic!("WHAT?!"),
         });
-        
+
         Ok(())
     }
 
@@ -459,7 +451,6 @@ impl kernel::mpu::MPU for MPU {
         if parent_size != min_region_size {
             unimplemented!("Flexible region requests not yet implemented");
         }
-
 
         let start = parent_start as usize;
         let len = min_region_size;
@@ -500,7 +491,7 @@ impl kernel::mpu::MPU for MPU {
                 None,
                 permissions,
             );
-        
+
             //debug!("Arg0: {:#b}", address_value);
             //debug!("Arg1: {}", region_len_value);
             //debug!("Arg2: {}", region_num as u32);
@@ -608,15 +599,13 @@ impl kernel::mpu::MPU for MPU {
 
         // Set PAM region
         // TODO: use config for this
-        self.1.map(|config| {
-            match config {
-                Some(cortexm_config) => {
-                    let region_config = cortexm_config.pam_region;
-                    regs.rbar.write(region_config.base_address);
-                    regs.rasr.write(region_config.attributes);
-                },
-                None => panic!("what?!")
+        self.1.map(|config| match config {
+            Some(cortexm_config) => {
+                let region_config = cortexm_config.pam_region;
+                regs.rbar.write(region_config.base_address);
+                regs.rasr.write(region_config.attributes);
             }
+            None => panic!("what?!"),
         });
     }
 }

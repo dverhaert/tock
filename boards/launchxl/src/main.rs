@@ -15,8 +15,8 @@ extern crate kernel;
 use capsules::virtual_uart::{UartDevice, UartMux};
 use cc26x2::aon;
 use cc26x2::prcm;
-use kernel::Chip;
 use kernel::hil;
+use kernel::Chip;
 
 #[macro_use]
 pub mod io;

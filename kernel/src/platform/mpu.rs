@@ -19,7 +19,9 @@ pub trait MPU {
     fn disable_mpu(&self) {}
 
     /// Returns the total number of regions supported by the MPU.
-    fn number_total_regions(&self) -> usize {}
+    fn number_total_regions(&self) -> usize {
+        0
+    }
 
     /// Chooses the location for a process's memory, and sets up
     /// an MPU region to expose the process-owned portion.
