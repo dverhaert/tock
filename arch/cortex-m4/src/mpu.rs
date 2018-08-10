@@ -163,6 +163,7 @@ pub struct ProcessMemoryInfo {
     pam_permissions: Permissions,
 }
 
+/// Struct containing the register values to be written
 #[derive(Copy, Clone)]
 pub struct RegionConfig {
     base_address: FieldValue<u32, RegionBaseAddress::Register>,
@@ -177,6 +178,7 @@ impl RegionConfig {
         subregion_mask: Option<u32>,
         permissions: Permissions,
     ) -> RegionConfig {
+        // Matching permissions with register values
         let (access, execute) = match permissions {
             Permissions::ReadWriteExecute => (
                 RegionAttributes::AP::ReadWrite,
@@ -205,12 +207,13 @@ impl RegionConfig {
             + RegionBaseAddress::VALID::UseRBAR
             + RegionBaseAddress::REGION.val(region_num);
         
+        // Write region size and permissions
         let mut attributes = RegionAttributes::ENABLE::SET
             + RegionAttributes::SIZE.val(size)
             + access
             + execute;
         
-        // Subregions enabled
+        // If subregions enabled, write them to register
         if let Some(mask) = subregion_mask {
             attributes += RegionAttributes::SRD.val(mask);
         }
@@ -271,6 +274,7 @@ impl kernel::mpu::MPU for MPU {
             min_app_ram_size
         };
 
+        // Some statements for debugging. Will be removed on PR.
         //debug!("Min app ram size: {}", min_app_ram_size);
         //debug!("Initial PAM size: {}", initial_pam_size);
         //debug!("Initial grant size: {}", initial_grant_size);
@@ -289,7 +293,6 @@ impl kernel::mpu::MPU for MPU {
             region_len = 128;
         } else if exponent > 32 {
             // Region sizes must be 4GB or smaller
-            //debug!("Region sizes too big");
             return None;
         }
         

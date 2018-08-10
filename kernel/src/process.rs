@@ -492,6 +492,7 @@ impl Process<'a> {
         }
 
         /*
+        // (Obsolete) PAM region
         let memory_start = self.memory.as_ptr();
         let memory_len = self.memory.len();
 
@@ -506,7 +507,6 @@ impl Process<'a> {
             Some(_) => (),
         }
         */
-
 
         if let Err(()) = mpu.update_process_memory_layout(
             self.app_break.get(),
@@ -539,6 +539,7 @@ impl Process<'a> {
         mpu.configure_mpu(&config);
     }
 
+    /// Add an MPU region for IPC
     crate fn add_mpu_region(&self, base: *const u8, size: u32) -> bool {
         if size >= 16 && size.count_ones() == 1 && (base as u32) % size == 0 {
             let mpu_size = math::PowerOfTwo::floor(size);
@@ -557,6 +558,7 @@ impl Process<'a> {
         return false;
     }
 
+    /// Allocate a process's memory
     crate unsafe fn create<M: mpu::MPU>(
         kernel: &'static Kernel,
         mpu: &M,

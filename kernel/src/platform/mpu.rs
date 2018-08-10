@@ -19,9 +19,7 @@ pub trait MPU {
     fn disable_mpu(&self) {}
 
     /// Returns the total number of regions supported by the MPU.
-    fn number_total_regions(&self) -> usize {
-        8
-    }
+    fn number_total_regions(&self) -> usize {}
 
     /// Chooses the location for a process's memory, and sets up
     /// an MPU region to expose the process-owned portion.
@@ -39,7 +37,7 @@ pub trait MPU {
     /// `parent_start`          : start of the parent region
     /// `parent_size`           : size of the parent region
     /// `min_app_ram_size`      : minimum ram size to allocate for process
-    /// `initial_pam_size`      : initial size for the PAM (process acessible memory)
+    /// `initial_pam_size`      : initial size for the PAM (process accessible memory)
     /// `initial_grant_size`    : initial size for the process grant
     /// `permissions`           : permissions for the PAM MPU region
     /// `config`                : MPU region configuration
