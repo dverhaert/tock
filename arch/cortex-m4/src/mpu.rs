@@ -137,6 +137,8 @@ pub struct CortexMConfig {
     num_regions_used: usize,
 }
 
+const PAM_REGION_NUM: usize = 7;
+
 impl Default for CortexMConfig {
     fn default() -> CortexMConfig {
         CortexMConfig {
@@ -228,8 +230,6 @@ impl RegionConfig {
         }
     }
 }
-
-const PAM_REGION_NUM: usize = 7;
 
 impl kernel::mpu::MPU for MPU {
     type MpuConfig = CortexMConfig;
@@ -356,8 +356,16 @@ impl kernel::mpu::MPU for MPU {
                 cortexm_config.memory_info = Some(memory_info);
                 cortexm_config.pam_region = region_config;
             }
-            None => panic!("WHAT?!"),
+            None => panic!("Config not written correctly"),
         });
+
+        // TODO: do this in config and set PAM region to region 0. Two reasons:
+        // (1) More logical to increment the number of used regions when setting up the PAM
+        // (2) On future addition of overlapping regions (e.g. it becomes necessary to add a small grant region), this region will have higher priority because the Cortex-M orders region priorities by their index
+        // let region_num = config.num_regions_used;
+        // debug!("regions used: {}", region_num);
+        // config.regions[region_num] = region_config;
+        // config.num_regions_used += 1;
 
         Some((region_start as *const u8, region_len as usize))
     }
@@ -387,7 +395,7 @@ impl kernel::mpu::MPU for MPU {
                         }
                     };
                 }
-                None => panic!("WHAT?!"),
+                None => panic!("Config not written correctly"),
             }
         });
 
@@ -426,7 +434,7 @@ impl kernel::mpu::MPU for MPU {
 
         self.1.map(|config| match config {
             Some(cortexm_config) => cortexm_config.pam_region = region_config,
-            None => panic!("WHAT?!"),
+            None => panic!("Config not written correctly"),
         });
 
         Ok(())
@@ -605,7 +613,7 @@ impl kernel::mpu::MPU for MPU {
                 regs.rbar.write(region_config.base_address);
                 regs.rasr.write(region_config.attributes);
             }
-            None => panic!("what?!"),
+            None => panic!("Config not written correctly"),
         });
     }
 }

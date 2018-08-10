@@ -72,8 +72,8 @@ pub trait MPU {
         }
     }
 
-    /// Updates the MPU region for PAM to reflect any change in the app memory
-    /// and/or kernel memory breaks.
+    /// Updates the existing MPU region for PAM to reflect any change in the
+    /// app memory and/or kernel memory breaks.
     ///
     /// The implementor must update the PAM MPU region stored in `config` to extend
     /// past `app_memory_break`, but not past `kernel_memory_break`.
