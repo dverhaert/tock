@@ -460,8 +460,13 @@ impl kernel::mpu::MPU for MPU {
         //     unimplemented!("Flexible region requests not yet implemented");
         // }
 
-        let mut start = parent_start as usize;
+        // Preferably, the region will start at the start of the parent region
+        let mut region_start = parent_start as usize;
+
+        // Regions have to be a power of two
         let mut region_len = math::closest_power_of_two(min_region_size as u32) as usize;
+
+        // Calculate the 
         let mut exponent = math::log_base_two(region_len as u32);
 
         // Region length must not be bigger than parent size
@@ -479,111 +484,125 @@ impl kernel::mpu::MPU for MPU {
             return None;
         }
 
-        let mut address_value = start as u32;
+        let mut address_value = region_start as u32;
         let mut size_value = exponent - 1;
         let mut subregion_mask = None;
 
-        // There are two possibilities we support:
-        //
-        // 1. The base address is aligned exactly to the size of the region,
-        //    which uses an MPU region with the exact base address and size of
-        //    the memory region.
-        //
-        // 2. Otherwise, we can use a larger MPU region and expose only MPU
-        //    subregions, as long as the memory region's base address is aligned
-        //    to 1/8th of a larger region size.
+        // Things get more difficult if the start doesn't align to the length.
+        // We can use a larger MPU region and expose only MPU subregions, as
+        // long as the memory region's base address is aligned to 1/8th of a
+        // larger region size.  Possibility 2
+    
+        if region_start % region_len != 0 { 
+            if exponent < 7 {
+                // Region sizes must be 128 Bytes or larger in order to support subregions
+                exponent = 7; 
+                region_len = 128; 
+            }
 
-        // // Possibility 1
-        // if start % region_len == 0 {
-        //     // Memory base aligned to memory size - straight forward case
-        // }
+            // Move region start up so that it aligns with the length
+            region_start += region_len - (region_start % region_len);
 
-        // Things get difficult if the start doesn't align to the region length.
-        // Possibility 2
-        if start % region_len != 0 {
+            // Make sure that the requested region fits in memory
+            let parent_end = parent_start as usize + parent_size;
+            if region_start + region_len > parent_end {
+                //debug!("Requested region doesn't fit in memory");
+                return None;
+            }
+
+            //debug!("Parent start: {:#X}", parent_start as usize);
+            //debug!("Region start: {:#X}", region_start);
+            //debug!("Region len: {}", region_len);
+ 
+            // TODO
+            // let subregions_used = (initial_pam_size * 8) as u32 / region_len + 1;
+            let subregions_used = 8;
+
+            // EX: 00001111 & 11111111 = 00001111 --> Use the first four subregions (0 = enable)
+            subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
             unimplemented!("");
-        //     // Memory base not aligned to memory size
+            //     // Memory base not aligned to memory size
 
-        //     // Which (power-of-two) subregion size would align with the base
-        //     // address?
-        //     //
-        //     // We find this by taking smallest binary substring of the base
-        //     // address with exactly one bit:
-        //     //
-        //     //      1 << (start.trailing_zeros())
-        //     let subregion_size = {
-        //         let tz = start.trailing_zeros();
-        //         // `start` should never be 0 because of that's taken care of by
-        //         // the previous branch, but in case it is, do the right thing
-        //         // anyway.
-        //         if tz < 32 {
-        //             (1 as usize) << tz
-        //         } else {
-        //             0
-        //         }
-        //     };
+            //     // Which (power-of-two) subregion size would align with the base
+            //     // address?
+            //     //
+            //     // We find this by taking smallest binary substring of the base
+            //     // address with exactly one bit:
+            //     //
+            //     //      1 << (start.trailing_zeros())
+            //     let subregion_size = {
+            //         let tz = start.trailing_zeros();
+            //         // `start` should never be 0 because of that's taken care of by
+            //         // the previous branch, but in case it is, do the right thing
+            //         // anyway.
+            //         if tz < 32 {
+            //             (1 as usize) << tz
+            //         } else {
+            //             0
+            //         }
+            //     };
 
-        //     // Once we have a subregion size, we get a region size by
-        //     // multiplying it by the number of subregions per region.
-        //     let region_size = subregion_size * 8;
-        //     // Finally, we calculate the region base by finding the nearest
-        //     // address below `start` that aligns with the region size.
-        //     let region_start = start - (start % region_size);
+            //     // Once we have a subregion size, we get a region size by
+            //     // multiplying it by the number of subregions per region.
+            //     let region_size = subregion_size * 8;
+            //     // Finally, we calculate the region base by finding the nearest
+            //     // address below `start` that aligns with the region size.
+            //     let region_start = start - (start % region_size);
 
-        //     if region_size + region_start - start < len {
-        //         // Sanity check that the amount left over space in the region
-        //         // after `start` is at least as large as the memory region we
-        //         // want to reference.
-        //         return None;
-        //     }
-        //     if len % subregion_size != 0 {
-        //         // Sanity check that there is some integer X such that
-        //         // subregion_size * X == len so none of `len` is left over when
-        //         // we take the max_subregion.
-        //         return None;
-        //     }
+            //     if region_size + region_start - start < len {
+            //         // Sanity check that the amount left over space in the region
+            //         // after `start` is at least as large as the memory region we
+            //         // want to reference.
+            //         return None;
+            //     }
+            //     if len % subregion_size != 0 {
+            //         // Sanity check that there is some integer X such that
+            //         // subregion_size * X == len so none of `len` is left over when
+            //         // we take the max_subregion.
+            //         return None;
+            //     }
 
-        //     // The index of the first subregion to activate is the number of
-        //     // regions between `region_start` (MPU) and `start` (memory).
-        //     let min_subregion = (start - region_start) / subregion_size;
-        //     // The index of the last subregion to activate is the number of
-        //     // regions that fit in `len`, plus the `min_subregion`, minus one
-        //     // (because subregions are zero-indexed).
-        //     let max_subregion = min_subregion + len / subregion_size - 1;
+            //     // The index of the first subregion to activate is the number of
+            //     // regions between `region_start` (MPU) and `start` (memory).
+            //     let min_subregion = (start - region_start) / subregion_size;
+            //     // The index of the last subregion to activate is the number of
+            //     // regions that fit in `len`, plus the `min_subregion`, minus one
+            //     // (because subregions are zero-indexed).
+            //     let max_subregion = min_subregion + len / subregion_size - 1;
 
-        //     let region_len = PowerOfTwo::floor(region_size as u32);
-        //     // exponent = log2(region_len)
-        //     let exponent = region_len.exp::<u32>();
-        //     if exponent < 7 {
-        //         // Subregions only supported for regions sizes 128 bytes and up.
-        //         return None;
-        //     } else if exponent > 32 {
-        //         // Region sizes must be 4GB or smaller
-        //         return None;
-        //     }
+            //     let region_len = PowerOfTwo::floor(region_size as u32);
+            //     // exponent = log2(region_len)
+            //     let exponent = region_len.exp::<u32>();
+            //     if exponent < 7 {
+            //         // Subregions only supported for regions sizes 128 bytes and up.
+            //         return None;
+            //     } else if exponent > 32 {
+            //         // Region sizes must be 4GB or smaller
+            //         return None;
+            //     }
 
-        //     // Turn the min/max subregion into a bitfield where all bits are `1`
-        //     // except for the bits whose index lie within
-        //     // [min_subregion, max_subregion]
-        //     //
-        //     // Note: Rust ranges are minimum inclusive, maximum exclusive, hence
-        //     // max_subregion + 1.
-        //     subregion_mask =
-        //         Some((min_subregion..(max_subregion + 1)).fold(!0, |res, i| res & !(1 << i)) & 0xff);
+            //     // Turn the min/max subregion into a bitfield where all bits are `1`
+            //     // except for the bits whose index lie within
+            //     // [min_subregion, max_subregion]
+            //     //
+            //     // Note: Rust ranges are minimum inclusive, maximum exclusive, hence
+            //     // max_subregion + 1.
+            //     subregion_mask =
+            //         Some((min_subregion..(max_subregion + 1)).fold(!0, |res, i| res & !(1 << i)) & 0xff);
 
-        //     address_value = region_start as u32;
-        //     size_value = exponent - 1;
+            //     address_value = region_start as u32;
+            //     size_value = exponent - 1;
 
-        //     let region_config = RegionConfig::new(
-        //         address_value,
-        //         size_value,
-        //         region_num as u32,
-        //         subregion_mask,
-        //         permissions,
-        //     );
+            //     let region_config = RegionConfig::new(
+            //         address_value,
+            //         size_value,
+            //         region_num as u32,
+            //         subregion_mask,
+            //         permissions,
+            //     );
 
-        //     config.regions[region_num] = region_config;
-        //     config.num_regions_used += 1;
+            //     config.regions[region_num] = region_config;
+            //     config.num_regions_used += 1;
         }
 
         let region_config = RegionConfig::new(
