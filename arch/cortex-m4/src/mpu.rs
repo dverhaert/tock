@@ -455,25 +455,15 @@ impl kernel::mpu::MPU for MPU {
             return None;
         }
 
-        // TODO
-        // if parent_size != min_region_size {
-        //     unimplemented!("Flexible region requests not yet implemented");
-        // }
-
         // Preferably, the region will start at the start of the parent region
         let mut region_start = parent_start as usize;
 
         // Regions have to be a power of two
         let mut region_len = math::closest_power_of_two(min_region_size as u32) as usize;
 
-        // Calculate the 
+        // Calculate the log base two
         let mut exponent = math::log_base_two(region_len as u32);
 
-        // Region length must not be bigger than parent size
-        // Sanity check, is also done later
-        if region_len > parent_size {
-            return None;
-        }
 
         if exponent < 5 {
             // Region sizes must be 32 Bytes or larger
@@ -481,6 +471,11 @@ impl kernel::mpu::MPU for MPU {
             region_len = 32;
         } else if exponent > 32 {
             // Region sizes must be 4GB or smaller
+            return None;
+        }
+
+        // Region length must not be bigger than parent size
+        if region_len > parent_size {
             return None;
         }
 
@@ -494,8 +489,12 @@ impl kernel::mpu::MPU for MPU {
         // larger region size.  Possibility 2
     
         if region_start % region_len != 0 { 
-            if exponent < 7 {
-                // Region sizes must be 128 Bytes or larger in order to support subregions
+            // Region sizes must be 128 Bytes or larger in order to support subregions.
+            // Therefore check region length and parent length
+            if parent_size < 128 {
+                return None;
+            }            
+            if exponent < 7 {                
                 exponent = 7; 
                 region_len = 128; 
             }
@@ -503,10 +502,10 @@ impl kernel::mpu::MPU for MPU {
             // Move region start up so that it aligns with the length
             region_start += region_len - (region_start % region_len);
 
-            // Make sure that the requested region fits in memory
             let parent_end = parent_start as usize + parent_size;
+            // With the now adjusted start, again make sure that the requested
+            // region fits in memory
             if region_start + region_len > parent_end {
-                //debug!("Requested region doesn't fit in memory");
                 return None;
             }
 
@@ -519,20 +518,19 @@ impl kernel::mpu::MPU for MPU {
             let subregions_used = 8;
 
             // EX: 00001111 & 11111111 = 00001111 --> Use the first four subregions (0 = enable)
-            subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+            subregion_mask = Some((0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff);
             unimplemented!("");
             //     // Memory base not aligned to memory size
-
             //     // Which (power-of-two) subregion size would align with the base
             //     // address?
             //     //
             //     // We find this by taking smallest binary substring of the base
             //     // address with exactly one bit:
             //     //
-            //     //      1 << (start.trailing_zeros())
+            //     //      1 << (region_start.trailing_zeros())
             //     let subregion_size = {
-            //         let tz = start.trailing_zeros();
-            //         // `start` should never be 0 because of that's taken care of by
+            //         let tz = region_start.trailing_zeros();
+            //         // `region_start` should never be 0 because of that's taken care of by
             //         // the previous branch, but in case it is, do the right thing
             //         // anyway.
             //         if tz < 32 {
@@ -569,18 +567,6 @@ impl kernel::mpu::MPU for MPU {
             //     // regions that fit in `len`, plus the `min_subregion`, minus one
             //     // (because subregions are zero-indexed).
             //     let max_subregion = min_subregion + len / subregion_size - 1;
-
-            //     let region_len = PowerOfTwo::floor(region_size as u32);
-            //     // exponent = log2(region_len)
-            //     let exponent = region_len.exp::<u32>();
-            //     if exponent < 7 {
-            //         // Subregions only supported for regions sizes 128 bytes and up.
-            //         return None;
-            //     } else if exponent > 32 {
-            //         // Region sizes must be 4GB or smaller
-            //         return None;
-            //     }
-
             //     // Turn the min/max subregion into a bitfield where all bits are `1`
             //     // except for the bits whose index lie within
             //     // [min_subregion, max_subregion]
@@ -593,16 +579,6 @@ impl kernel::mpu::MPU for MPU {
             //     address_value = region_start as u32;
             //     size_value = exponent - 1;
 
-            //     let region_config = RegionConfig::new(
-            //         address_value,
-            //         size_value,
-            //         region_num as u32,
-            //         subregion_mask,
-            //         permissions,
-            //     );
-
-            //     config.regions[region_num] = region_config;
-            //     config.num_regions_used += 1;
         }
 
         let region_config = RegionConfig::new(
@@ -616,7 +592,7 @@ impl kernel::mpu::MPU for MPU {
         config.regions[region_num] = region_config;
         config.num_regions_used += 1;
 
-        Some((start as *const u8, region_len))
+        Some((region_start as *const u8, region_len))
     }
 
     fn configure_mpu(&self, config: &Self::MpuConfig) {
