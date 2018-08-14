@@ -10,7 +10,7 @@ use capabilities::ProcessManagementCapability;
 use common::cells::MapCell;
 use common::math;
 use common::{Queue, RingBuffer};
-use platform::mpu;
+use platform::mpu::{self, MPU};
 use returncode::ReturnCode;
 use sched::Kernel;
 use syscall::{self, Syscall, UserspaceKernelBoundary};
@@ -31,10 +31,10 @@ pub static mut SCB_REGISTERS: [u32; 5] = [0; 5];
 /// number of processes are created, with process structures placed in the
 /// provided array. How process faults are handled by the kernel is also
 /// selected.
-pub fn load_processes<S: UserspaceKernelBoundary, M: mpu::MPU>(
+pub fn load_processes<S: UserspaceKernelBoundary, M: MPU>(
     kernel: &'static Kernel,
     syscall: &'static S,
-    mpu: &M,
+    mpu: &'static M,
     start_of_flash: *const u8,
     app_memory: &mut [u8],
     procs: &'static mut [Option<&'static ProcessType>],
@@ -293,7 +293,7 @@ struct ProcessDebug {
     restart_count: usize,
 }
 
-pub struct Process<'a, S: 'static + UserspaceKernelBoundary> {
+pub struct Process<'a, S: 'static + UserspaceKernelBoundary, M: 'static + MPU> {
     /// Pointer to the main Kernel struct.
     kernel: &'static Kernel,
 
@@ -360,6 +360,8 @@ pub struct Process<'a, S: 'static + UserspaceKernelBoundary> {
     /// How to deal with Faults occurring in the process
     fault_response: FaultResponse,
 
+    mpu: &'static M,
+
     /// MPU regions are saved as a pointer-size pair.
     ///
     /// size is encoded as X where
@@ -384,7 +386,7 @@ pub struct Process<'a, S: 'static + UserspaceKernelBoundary> {
     debug: MapCell<ProcessDebug>,
 }
 
-impl<S: UserspaceKernelBoundary> ProcessType for Process<'a, S> {
+impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
     fn enqueue_task(&self, task: Task) -> bool {
         // If this app is in the `Fault` state then we shouldn't schedule
         // any work for it.
@@ -1169,11 +1171,11 @@ impl<S: UserspaceKernelBoundary> ProcessType for Process<'a, S> {
     }
 }
 
-impl<S: 'static + UserspaceKernelBoundary> Process<'a, S> {
-    crate unsafe fn create<M: mpu::MPU>(
+impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
+    crate unsafe fn create(
         kernel: &'static Kernel,
         syscall: &'static S,
-        mpu: &M,
+        mpu: &'static M,
         app_flash_address: *const u8,
         remaining_app_memory: *mut u8,
         remaining_app_memory_size: usize,
@@ -1209,7 +1211,7 @@ impl<S: 'static + UserspaceKernelBoundary> Process<'a, S> {
             let callbacks_offset = callback_len * callback_size;
 
             // Make room to store this process's metadata.
-            let process_struct_offset = mem::size_of::<Process<S>>();
+            let process_struct_offset = mem::size_of::<Process<S, M>>();
 
             let initial_grant_size = grant_ptrs_offset + callbacks_offset + process_struct_offset;
             let initial_pam_size = 128;
@@ -1290,8 +1292,8 @@ impl<S: 'static + UserspaceKernelBoundary> Process<'a, S> {
             let mut app_stack_start_pointer = None;
 
             // Create the Process struct in the app grant region.
-            let mut process: &mut Process<S> =
-                &mut *(process_struct_memory_location as *mut Process<'static, S>);
+            let mut process: &mut Process<S, M> =
+                &mut *(process_struct_memory_location as *mut Process<'static, S, M>);
 
             process.kernel = kernel;
             process.syscall = syscall;
@@ -1310,6 +1312,7 @@ impl<S: 'static + UserspaceKernelBoundary> Process<'a, S> {
             process.state = Cell::new(State::Yielded);
             process.fault_response = fault_response;
 
+            process.mpu = mpu;
             process.mpu_regions = [
                 Cell::new((ptr::null(), math::PowerOfTwo::zero())),
                 Cell::new((ptr::null(), math::PowerOfTwo::zero())),
