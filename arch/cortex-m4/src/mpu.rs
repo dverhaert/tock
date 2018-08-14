@@ -486,10 +486,9 @@ impl kernel::mpu::MPU for MPU {
             size_value = exponent - 1;
             subregion_mask = None;
         }
-
         // Case 2: Hard
         // Things get more difficult if the start doesn't align to the length.
-        // If the start still aligns to the region length / 4, 
+        // If the start still aligns to the region length / 4,
         // We can use a larger MPU region and expose only MPU subregions, as
         // long as the memory region's base address is aligned to 1/8th of a
         // larger region size.  Possibility 2
@@ -497,14 +496,14 @@ impl kernel::mpu::MPU for MPU {
             // Region sizes must be 128 Bytes or larger in order to support subregions.
             // Therefore check region length
             if exponent < 7 {
-                exponent = 7; 
-                region_len = 128; 
+                exponent = 7;
+                region_len = 128;
             }
 
             let mut result = 0;
 
             // If the start doesn't align to the region length / 4, this means
-            // start will have to be changed 
+            // start will have to be changed
             if region_start % (region_len / 4) != 0 {
                 // Move start so that it aligns with region_len / 4
                 for x in region_start..(parent_end - region_len) {
@@ -512,7 +511,7 @@ impl kernel::mpu::MPU for MPU {
                         result = 1;
                         region_start = x;
                         break;
-                    } 
+                    }
                 }
                 // No region could be found within the parent region and with region_len which suffices Cortex-M requirements
                 // Either the parent size should be bigger/differently located, or the region size should be smaller
@@ -521,11 +520,11 @@ impl kernel::mpu::MPU for MPU {
                 }
             }
 
-            // Check just to make sure we're still within parent
+            // Check to make sure we're still within parent
             let parent_end = parent_start as usize + parent_size;
             if region_start + region_len > parent_end {
                 return None;
-            }    
+            }
 
             // Memory base not aligned to memory size
             // Which (power-of-two) subregion size would align with the base
@@ -550,25 +549,17 @@ impl kernel::mpu::MPU for MPU {
             // Once we have a subregion size, we get an underlying region size by
             // multiplying it by the number of subregions per region.
             let underlying_region_size = subregion_size * 8;
-            
-            
+
             // Finally, we calculate the region base by finding the nearest
-            // address below `start` that aligns with the region size.
-            let underlying_region_start = region_start - (region_start % region_size);
-
-
-            }
-
-            // EX: 00001111 & 11111111 = 00001111 --> Use the first four subregions (0 = enable)
-            subregion_mask = Some((0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff);
-            unimplemented!("");
+            // address below `region_start` that aligns with the region size.
+            let underlying_region_start = region_start - (region_start % underlying_region_size);
 
             if underlying_region_size + underlying_region_start - region_start < region_size {
                 // Basically, check if the length from region_start until underlying_region_end is greater than region_len
                 // TODO: Should honestly never happen, remove?
                 return None;
             }
-            if len % subregion_size != 0 {
+            if region_len % subregion_size != 0 {
                 // Basically, check if the subregions actually align to the length
                 // TODO: Should always happen because of this line:
                 // if region_start % (region_len / 4) != 0
@@ -593,8 +584,9 @@ impl kernel::mpu::MPU for MPU {
             //
             // Note: Rust ranges are minimum inclusive, maximum exclusive, hence
             // max_subregion + 1.
-            subregion_mask =
-                Some((min_subregion..(max_subregion + 1)).fold(!0, |res, i| res & !(1 << i)) & 0xff);
+            subregion_mask = Some(
+                (min_subregion..(max_subregion + 1)).fold(!0, |res, i| res & !(1 << i)) & 0xff,
+            );
 
             address_value = region_start as u32;
             size_value = exponent - 1;
