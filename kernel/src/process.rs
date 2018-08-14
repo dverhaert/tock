@@ -167,7 +167,6 @@ pub trait ProcessType {
 
     // mpu
 
-    //fn setup_mpu(&self, mpu: &mpu::MPU);
     fn setup_mpu(&self);
 
     fn add_mpu_region(&self, base: *const u8, size: u32) -> bool;
@@ -552,23 +551,21 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
         }
     }
 
-    //fn setup_mpu<MPU: mpu::MPU>(&self, mpu: &MPU) {
     fn setup_mpu(&self) {
-        /*
-        if mpu.number_total_regions() != 8 {
+        if self.mpu.number_total_regions() != 8 {
             panic!("Currently Tock assumes 8 regions");
         }
 
         // TODO: Eventually we won't do this region computation every
         // context switch, but rather cache the resulting the MPU config data
         // in Process for use here
-        let mut config: MPU::MpuConfig = Default::default();
+        let mut config: M::MpuConfig = Default::default();
 
         let flash_start = self.flash.as_ptr();
         let flash_len = self.flash.len();
 
         // Flash region
-        if let None = mpu.expose_memory_region(
+        if let None = self.mpu.expose_memory_region(
             flash_start,
             flash_len,
             flash_len,
@@ -595,7 +592,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
         }
         */
 
-        if let Err(()) = mpu.update_process_memory_layout(
+        if let Err(()) = self.mpu.update_process_memory_layout(
             self.app_break.get(),
             self.kernel_memory_break.get(),
             &mut config,
@@ -609,7 +606,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
                 let ipc_start = region.get().0;
                 let ipc_len = region.get().1.as_num::<u32>() as usize;
 
-                if let None = mpu.expose_memory_region(
+                if let None = self.mpu.expose_memory_region(
                     ipc_start,
                     ipc_len,
                     ipc_len,
@@ -622,8 +619,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
         }
 
         // Set MPU regions
-        mpu.configure_mpu(&config);
-        */
+        self.mpu.configure_mpu(&config);
     }
 
     /// Add an MPU region for IPC
