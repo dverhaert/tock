@@ -545,5 +545,5 @@ pub unsafe fn reset_handler() {
         &mut PROCESSES,
         FAULT_RESPONSE,
     );
-    board_kernel.kernel_loop(&hail, &mut chip, Some(&hail.ipc));
+    board_kernel.kernel_loop(&hail, &mut chip, Some(&hail.ipc), mpu);
 }
