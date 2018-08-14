@@ -23,7 +23,6 @@ use kernel::capabilities;
 use kernel::hil;
 use kernel::hil::spi::SpiMaster;
 use kernel::hil::Controller;
-use kernel::Chip;
 use kernel::Platform;
 
 /// Support routines for debugging I/O.
