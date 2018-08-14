@@ -167,7 +167,8 @@ pub trait ProcessType {
 
     // mpu
 
-    fn setup_mpu(&self, mpu: &mpu::MPU);
+    //fn setup_mpu(&self, mpu: &mpu::MPU);
+    fn setup_mpu(&self);
 
     fn add_mpu_region(&self, base: *const u8, size: u32) -> bool;
 
@@ -549,7 +550,9 @@ impl<S: UserspaceKernelBoundary> ProcessType for Process<'a, S> {
         }
     }
 
-    fn setup_mpu<MPU: mpu::MPU>(&self, mpu: &MPU) {
+    //fn setup_mpu<MPU: mpu::MPU>(&self, mpu: &MPU) {
+    fn setup_mpu(&self) {
+        /*
         if mpu.number_total_regions() != 8 {
             panic!("Currently Tock assumes 8 regions");
         }
@@ -618,6 +621,7 @@ impl<S: UserspaceKernelBoundary> ProcessType for Process<'a, S> {
 
         // Set MPU regions
         mpu.configure_mpu(&config);
+        */
     }
 
     /// Add an MPU region for IPC
@@ -1166,10 +1170,10 @@ impl<S: UserspaceKernelBoundary> ProcessType for Process<'a, S> {
 }
 
 impl<S: 'static + UserspaceKernelBoundary> Process<'a, S> {
-    crate unsafe fn create(
+    crate unsafe fn create<M: mpu::MPU>(
         kernel: &'static Kernel,
         syscall: &'static S,
-        mpu: &'static M,
+        mpu: &M,
         app_flash_address: *const u8,
         remaining_app_memory: *mut u8,
         remaining_app_memory_size: usize,
@@ -1185,14 +1189,10 @@ impl<S: 'static + UserspaceKernelBoundary> Process<'a, S> {
             }
 
             // Otherwise, actually load the app.
-            let mut min_app_ram_size = tbf_header.get_minimum_app_ram_size();
+            let mut min_app_ram_size = tbf_header.get_minimum_app_ram_size() as usize;
             let process_name = tbf_header.get_package_name(app_flash_address);
             let init_fn =
                 app_flash_address.offset(tbf_header.get_init_function_offset() as isize) as usize;
-
-                                    // Set the initial process stack and memory to 128 bytes.
-                                    let initial_stack_pointer = remaining_app_memory.offset(128);
-                                    let initial_sbrk_pointer = remaining_app_memory.offset(128);
 
             // First determine how much space we need in the application's
             // memory space just for kernel and grant state. We need to make
@@ -1243,7 +1243,7 @@ impl<S: 'static + UserspaceKernelBoundary> Process<'a, S> {
             if memory_size + memory_padding_size > remaining_app_memory_size {
                 panic!(
                     "{:?} failed to load. Insufficient memory. Requested {} have {}",
-                    package_name,
+                    process_name,
                     memory_size + memory_padding_size,
                     remaining_app_memory_size
                 );

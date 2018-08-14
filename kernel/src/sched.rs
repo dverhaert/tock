@@ -225,12 +225,13 @@ impl Kernel {
                     // Running means that this process expects to be running,
                     // so go ahead and set things up and switch to executing
                     // the process.
-                    process.setup_mpu(chip.mpu());
-                    chip.mpu().enable_mpu();
+                    //process.setup_mpu(chip.mpu());
+                    //process.setup_mpu();
+                    //chip.mpu().enable_mpu();
                     systick.enable(true);
                     let context_switch_reason = process.switch_to();
                     systick.enable(false);
-                    chip.mpu().disable_mpu();
+                    //chip.mpu().disable_mpu();
 
                     // Now the process has returned back to the kernel. Check
                     // why and handle the process as appropriate.
