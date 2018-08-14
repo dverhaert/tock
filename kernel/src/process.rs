@@ -169,9 +169,9 @@ pub trait ProcessType {
 
     fn enable_mpu(&self);
 
-    fn setup_mpu(&self);
-
     fn disable_mpu(&self);
+    
+    fn setup_mpu(&self);
 
     fn add_mpu_region(&self, base: *const u8, size: u32) -> bool;
 
@@ -363,7 +363,11 @@ pub struct Process<'a, S: 'static + UserspaceKernelBoundary, M: 'static + MPU> {
     /// How to deal with Faults occurring in the process
     fault_response: FaultResponse,
 
+    /// Pointer to the MPU
     mpu: &'static M,
+    
+    /// Configuration data for the MPU
+    mpu_config: MapCell<M::MpuConfig>,
 
     /// MPU regions are saved as a pointer-size pair.
     ///
@@ -1230,9 +1234,23 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
                 min_app_ram_size = initial_pam_size + initial_grant_size;
             }
 
-            let mut config: M::MpuConfig = Default::default();
+            // New MPU config
+            let mut mpu_config: M::MpuConfig = Default::default();
 
-            // Set up MPU region for PAM
+            /*
+            // Allocate MPU region for flash
+            if let None = self.mpu.expose_memory_region(
+                app_flash_address,
+                app_flash_size,
+                app_flash_size,
+                mpu::Permissions::ReadExecuteOnly,
+                &mut mpu_config,
+            ) {
+                panic!("Failed allocating flash MPU region");
+            }
+            */
+
+            // Allocate MPU region for PAM
             let (memory_start, memory_size) = match mpu.setup_process_memory_layout(
                 remaining_app_memory as *const u8,
                 remaining_app_memory_size,
@@ -1240,7 +1258,7 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
                 initial_pam_size,
                 initial_grant_size,
                 mpu::Permissions::ReadWriteExecute,
-                &mut config,
+                &mut mpu_config,
             ) {
                 Some((memory_start, memory_size)) => (memory_start, memory_size),
                 None => panic!("Failed setting up process memory layout."),
@@ -1321,6 +1339,7 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
             process.fault_response = fault_response;
 
             process.mpu = mpu;
+            process.mpu_config = MapCell::new(mpu_config);
             process.mpu_regions = [
                 Cell::new((ptr::null(), math::PowerOfTwo::zero())),
                 Cell::new((ptr::null(), math::PowerOfTwo::zero())),
