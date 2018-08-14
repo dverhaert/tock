@@ -167,7 +167,11 @@ pub trait ProcessType {
 
     // mpu
 
+    fn enable_mpu(&self);
+
     fn setup_mpu(&self);
+
+    fn disable_mpu(&self);
 
     fn add_mpu_region(&self, base: *const u8, size: u32) -> bool;
 
@@ -549,6 +553,14 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
                 debug.app_heap_start_pointer = Some(heap_pointer);
             });
         }
+    }
+
+    fn enable_mpu(&self) {
+        self.mpu.enable_mpu();
+    }
+    
+    fn disable_mpu(&self) {
+        self.mpu.disable_mpu();
     }
 
     fn setup_mpu(&self) {
