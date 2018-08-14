@@ -572,6 +572,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
             panic!("Currently Tock assumes 8 regions");
         }
 
+        /*
         // TODO: Eventually we won't do this region computation every
         // context switch, but rather cache the resulting the MPU config data
         // in Process for use here
@@ -590,6 +591,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
         ) {
             panic!("Unable to allocate flash MPU region");
         }
+        */
 
         /*
         // (Obsolete) PAM region
@@ -608,6 +610,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
         }
         */
 
+        /*
         if let Err(()) = self.mpu.update_process_memory_layout(
             self.app_break.get(),
             self.kernel_memory_break.get(),
@@ -633,9 +636,12 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
                 }
             }
         }
+        */
 
-        // Set MPU regions
-        self.mpu.configure_mpu(&config);
+        // Configure MPU 
+        self.mpu_config.map(|config| {
+            self.mpu.configure_mpu(&config);
+        });
     }
 
     /// Add an MPU region for IPC
@@ -1237,9 +1243,8 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
             // New MPU config
             let mut mpu_config: M::MpuConfig = Default::default();
 
-            /*
             // Allocate MPU region for flash
-            if let None = self.mpu.expose_memory_region(
+            if let None = mpu.expose_memory_region(
                 app_flash_address,
                 app_flash_size,
                 app_flash_size,
@@ -1248,7 +1253,6 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
             ) {
                 panic!("Failed allocating flash MPU region");
             }
-            */
 
             // Allocate MPU region for PAM
             let (memory_start, memory_size) = match mpu.setup_process_memory_layout(
