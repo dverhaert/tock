@@ -121,11 +121,11 @@ const MPU_BASE_ADDRESS: StaticRef<MpuRegisters> =
     unsafe { StaticRef::new(0xE000ED90 as *const MpuRegisters) };
 
 /// Constructor field is private to limit who can create a new MPU
-pub struct MPU(StaticRef<MpuRegisters>, MapCell<Option<CortexMConfig>>);
+pub struct MPU(StaticRef<MpuRegisters>);
 
 impl MPU {
     pub const unsafe fn new() -> MPU {
-        MPU(MPU_BASE_ADDRESS, MapCell::new(None)) // TODO: remove hack: this should not be stored here.
+        MPU(MPU_BASE_ADDRESS) // TODO: remove hack: this should not be stored here.
     }
 }
 
@@ -353,23 +353,6 @@ impl kernel::mpu::MPU for MPU {
         config.memory_info = Some(memory_info);
         config.pam_region = region_config;
 
-        /*
-        // TODO: do this in config
-        let cortexm_config: CortexMConfig = Default::default();
-        self.1.replace(Some(cortexm_config));
-        self.1.map(|config| match config {
-            Some(cortexm_config) => {
-                let memory_info = ProcessMemoryInfo {
-                    memory_start: region_start as *const u8,
-                    memory_size: region_len as usize,
-                    pam_permissions: permissions,
-                };
-                cortexm_config.memory_info = Some(memory_info);
-                cortexm_config.pam_region = region_config;
-            }
-            None => panic!("Config not written correctly"),
-        });
-
         // TODO: do this in config and set PAM region to region 0. Two reasons:
         // (1) More logical to increment the number of used regions when setting up the PAM
         // (2) On future addition of overlapping regions (e.g. it becomes necessary to add a small grant region), this region will have higher priority because the Cortex-M orders region priorities by their index
@@ -388,29 +371,6 @@ impl kernel::mpu::MPU for MPU {
         new_kernel_memory_break: *const u8,
         config: &mut Self::MpuConfig,
     ) -> Result<(), ()> {
-        /*
-        let mut region_start = 0;
-        let mut region_len = 0;
-        let mut permissions = Permissions::ReadWriteExecute;
-        self.1.map(|config| {
-            match config {
-                Some(cortexm_config) => {
-                    match cortexm_config.memory_info {
-                        Some(memory_info) => {
-                            region_start = memory_info.memory_start as u32;
-                            region_len = memory_info.memory_size as u32;
-                            permissions = memory_info.pam_permissions;
-                        }
-                        None => {
-                            // PAM was never set up
-                            unimplemented!("");
-                        }
-                    };
-                }
-                None => panic!("Config not written correctly"),
-            }
-        });
-        */
 
         let (region_start, region_len, permissions) = match config.memory_info {
             Some(memory_info) => (memory_info.memory_start as u32, memory_info.memory_size as u32, memory_info.pam_permissions),
@@ -450,10 +410,7 @@ impl kernel::mpu::MPU for MPU {
             permissions,
         );
 
-        self.1.map(|config| match config {
-            Some(cortexm_config) => cortexm_config.pam_region = region_config,
-            None => panic!("Config not written correctly"),
-        });
+        config.pam_region = region_config;
 
         Ok(())
     }
@@ -626,18 +583,5 @@ impl kernel::mpu::MPU for MPU {
         // Set PAM MPU region
         regs.rbar.write(config.pam_region.base_address);
         regs.rasr.write(config.pam_region.attributes);
-
-        /*
-        // Set PAM region
-        // TODO: use config for this
-        self.1.map(|config| match config {
-            Some(cortexm_config) => {
-                let region_config = cortexm_config.pam_region;
-                regs.rbar.write(region_config.base_address);
-                regs.rasr.write(region_config.attributes);
-            }
-            None => panic!("Config not written correctly"),
-        });
-        */
     }
 }
