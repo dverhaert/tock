@@ -12,7 +12,7 @@
 
 extern crate capsules;
 #[allow(unused_imports)]
-#[macro_use(debug, debug_gpio, static_init)]
+#[macro_use(debug, debug_gpio, static_init, create_capability)]
 extern crate kernel;
 extern crate cortexm4;
 extern crate sam4l;
@@ -23,6 +23,7 @@ use capsules::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use capsules::virtual_i2c::MuxI2C;
 use capsules::virtual_spi::{MuxSpiMaster, VirtualSpiMasterDevice};
 use capsules::virtual_uart::{UartDevice, UartMux};
+use kernel::capabilities;
 use kernel::component::Component;
 use kernel::hil;
 use kernel::hil::radio;
@@ -34,6 +35,7 @@ use kernel::Chip;
 
 use components::adc::AdcComponent;
 use components::alarm::AlarmDriverComponent;
+use components::analog_comparator::AcComponent;
 use components::button::ButtonComponent;
 use components::console::ConsoleComponent;
 use components::crc::CrcComponent;
@@ -89,7 +91,7 @@ const FAULT_RESPONSE: kernel::procs::FaultResponse = kernel::procs::FaultRespons
 #[link_section = ".app_memory"]
 static mut APP_MEMORY: [u8; 16384] = [0; 16384];
 
-static mut PROCESSES: [Option<&'static kernel::procs::Process<'static>>; NUM_PROCS] = [None, None];
+static mut PROCESSES: [Option<&'static kernel::procs::ProcessType>; NUM_PROCS] = [None, None];
 
 /// Dummy buffer that causes the linker to reserve enough space for the stack.
 #[no_mangle]
@@ -106,6 +108,10 @@ struct Imix {
     adc: &'static capsules::adc::Adc<'static, sam4l::adc::Adc>,
     led: &'static capsules::led::LED<'static, sam4l::gpio::GPIOPin>,
     button: &'static capsules::button::Button<'static, sam4l::gpio::GPIOPin>,
+    analog_comparator: &'static capsules::analog_comparator::AnalogComparator<
+        'static,
+        sam4l::acifc::Acifc<'static>,
+    >,
     spi: &'static capsules::spi::Spi<'static, VirtualSpiMasterDevice<'static, sam4l::spi::SpiHw>>,
     ipc: kernel::ipc::IPC,
     ninedof: &'static capsules::ninedof::NineDof<'static>,
@@ -148,6 +154,7 @@ impl kernel::Platform for Imix {
             capsules::adc::DRIVER_NUM => f(Some(self.adc)),
             capsules::led::DRIVER_NUM => f(Some(self.led)),
             capsules::button::DRIVER_NUM => f(Some(self.button)),
+            capsules::analog_comparator::DRIVER_NUM => f(Some(self.analog_comparator)),
             capsules::ambient_light::DRIVER_NUM => f(Some(self.ambient_light)),
             capsules::temperature::DRIVER_NUM => f(Some(self.temp)),
             capsules::humidity::DRIVER_NUM => f(Some(self.humidity)),
@@ -209,12 +216,16 @@ unsafe fn set_pin_primary_functions() {
     PC[06].configure(Some(A)); // SCK         --  SPI CLK
     PC[07].configure(Some(B)); // RTS2 (BLE)  -- USART2_RTS
     PC[08].configure(Some(E)); // CTS2 (BLE)  -- USART2_CTS
-    PC[09].configure(None); //... NRF GPIO    -- GPIO
-    PC[10].configure(None); //... USER LED    -- GPIO
+                               //PC[09].configure(None); //... NRF GPIO    -- GPIO
+                               //PC[10].configure(None); //... USER LED    -- GPIO
+    PC[09].configure(Some(E)); // ACAN1       -- ACIFC comparator
+    PC[10].configure(Some(E)); // ACAP1       -- ACIFC comparator
     PC[11].configure(Some(B)); // RX2 (BLE)   -- USART2_RX
     PC[12].configure(Some(B)); // TX2 (BLE)   -- USART2_TX
-    PC[13].configure(None); //... ACC_INT1    -- GPIO
-    PC[14].configure(None); //... ACC_INT2    -- GPIO
+                               //PC[13].configure(None); //... ACC_INT1    -- GPIO
+                               //PC[14].configure(None); //... ACC_INT2    -- GPIO
+    PC[13].configure(Some(E)); //... ACBN1    -- ACIFC comparator
+    PC[14].configure(Some(E)); //... ACBP1    -- ACIFC comparator
     PC[16].configure(None); //... SENSE_PWR   --  GPIO pin
     PC[17].configure(None); //... NRF_PWR     --  GPIO pin
     PC[18].configure(None); //... RF233_PWR   --  GPIO pin
@@ -249,6 +260,12 @@ pub unsafe fn reset_handler() {
     sam4l::bpm::set_ck32source(sam4l::bpm::CK32Source::RC32K);
 
     set_pin_primary_functions();
+
+    // Create capabilities that the board needs to call certain protected kernel
+    // functions.
+    let process_mgmt_cap = create_capability!(capabilities::ProcessManagementCapability);
+    let main_cap = create_capability!(capabilities::MainLoopCapability);
+    let grant_cap = create_capability!(capabilities::MemoryAllocationCapability);
 
     power::configure_submodules(power::SubmoduleConfig {
         rf233: true,
@@ -324,6 +341,7 @@ pub unsafe fn reset_handler() {
     let led = LedComponent::new().finalize();
     let button = ButtonComponent::new(board_kernel).finalize();
     let crc = CrcComponent::new(board_kernel).finalize();
+    let analog_comparator = AcComponent::new().finalize();
 
     // Can this initialize be pushed earlier, or into component? -pal
     rf233.initialize(&mut RF233_BUF, &mut RF233_REG_WRITE, &mut RF233_REG_READ);
@@ -342,9 +360,10 @@ pub unsafe fn reset_handler() {
         adc: adc,
         led: led,
         button: button,
+        analog_comparator: analog_comparator,
         crc: crc,
         spi: spi_syscalls,
-        ipc: kernel::ipc::IPC::new(board_kernel),
+        ipc: kernel::ipc::IPC::new(board_kernel, &grant_cap),
         ninedof: ninedof,
         radio_driver: radio_driver,
         usb_driver: usb_driver,
@@ -373,12 +392,14 @@ pub unsafe fn reset_handler() {
     }
     kernel::procs::load_processes(
         board_kernel,
+        &cortexm4::syscall::SysCall::new(),
         chip.mpu(),
         &_sapps as *const u8,
         &mut APP_MEMORY,
         &mut PROCESSES,
         FAULT_RESPONSE,
+        &process_mgmt_cap,
     );
 
-    board_kernel.kernel_loop(&imix, &mut chip, Some(&imix.ipc));
+    board_kernel.kernel_loop(&imix, &mut chip, Some(&imix.ipc), &main_cap);
 }
