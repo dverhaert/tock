@@ -261,7 +261,7 @@ impl kernel::mpu::MPU for MPU {
         initial_pam_size: usize,
         initial_grant_size: usize,
         permissions: Permissions,
-        _config: &mut Self::MpuConfig,
+        config: &mut Self::MpuConfig,
     ) -> Option<(*const u8, usize)> {
         // If the user has not specified enough memory for PAM and grant, round up and fix.
         let app_ram_size = if min_app_ram_size < initial_pam_size + initial_grant_size {
@@ -342,7 +342,18 @@ impl kernel::mpu::MPU for MPU {
         //debug!("Arg0: {:#b}", region_start);
         //debug!("Arg1: {}", region_len_value);
         //debug!("Arg2: {}", 1);
+        //
 
+        let memory_info = ProcessMemoryInfo {
+            memory_start: region_start as *const u8,
+            memory_size: region_len as usize,
+            pam_permissions: permissions,
+        };
+
+        config.memory_info = Some(memory_info);
+        config.pam_region = region_config;
+
+        /*
         // TODO: do this in config
         let cortexm_config: CortexMConfig = Default::default();
         self.1.replace(Some(cortexm_config));
@@ -366,6 +377,7 @@ impl kernel::mpu::MPU for MPU {
         // debug!("regions used: {}", region_num);
         // config.regions[region_num] = region_config;
         // config.num_regions_used += 1;
+        */
 
         Some((region_start as *const u8, region_len as usize))
     }
@@ -374,9 +386,9 @@ impl kernel::mpu::MPU for MPU {
         &self,
         new_app_memory_break: *const u8,
         new_kernel_memory_break: *const u8,
-        _config: &mut Self::MpuConfig,
+        config: &mut Self::MpuConfig,
     ) -> Result<(), ()> {
-        // TODO: Use implementation from #1113
+        /*
         let mut region_start = 0;
         let mut region_len = 0;
         let mut permissions = Permissions::ReadWriteExecute;
@@ -398,6 +410,12 @@ impl kernel::mpu::MPU for MPU {
                 None => panic!("Config not written correctly"),
             }
         });
+        */
+
+        let (region_start, region_len, permissions) = match config.memory_info {
+            Some(memory_info) => (memory_info.memory_start as u32, memory_info.memory_size as u32, memory_info.pam_permissions),
+            None => panic!("Error: update_process_memory_layout called before setup_prcoess_memory_layout"),
+        };
 
         //debug!("First update:");
         //debug!("New app memory break: {:#X}", new_app_memory_break as usize);
@@ -605,6 +623,11 @@ impl kernel::mpu::MPU for MPU {
             regs.rasr.write(region_config.attributes);
         }
 
+        // Set PAM MPU region
+        regs.rbar.write(config.pam_region.base_address);
+        regs.rasr.write(config.pam_region.attributes);
+
+        /*
         // Set PAM region
         // TODO: use config for this
         self.1.map(|config| match config {
@@ -615,5 +638,6 @@ impl kernel::mpu::MPU for MPU {
             }
             None => panic!("Config not written correctly"),
         });
+        */
     }
 }
