@@ -22,7 +22,6 @@ use capsules::virtual_uart::{UartDevice, UartMux};
 use kernel::hil;
 use kernel::hil::spi::SpiMaster;
 use kernel::hil::Controller;
-use kernel::Chip;
 use kernel::Platform;
 
 /// Support routines for debugging I/O.
@@ -211,6 +210,8 @@ pub unsafe fn reset_handler() {
     );
 
     let mut chip = sam4l::chip::Sam4l::new();
+
+    let mpu = static_init!(cortexm4::mpu::MPU, cortexm4::mpu::MPU::new());
 
     // Initialize USART0 for Uart
     sam4l::usart::USART0.set_mode(sam4l::usart::UsartMode::Uart);
@@ -538,7 +539,7 @@ pub unsafe fn reset_handler() {
     kernel::procs::load_processes(
         board_kernel,
         &cortexm4::syscall::SysCall::new(),
-        chip.mpu(),
+        mpu,
         &_sapps as *const u8,
         &mut APP_MEMORY,
         &mut PROCESSES,
