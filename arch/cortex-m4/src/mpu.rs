@@ -634,6 +634,8 @@ impl kernel::mpu::MPU for MPU {
                 let underlying_region_start =
                     region_start - (region_start % underlying_region_size);
 
+                exponent = math::log_base_two(underlying_region_size as u32);
+
                 if underlying_region_size + underlying_region_start - region_start < region_len {
                     // Basically, check if the length from region_start until
                     // underlying_region_end is greater than region_len
@@ -669,7 +671,7 @@ impl kernel::mpu::MPU for MPU {
                     (min_subregion..(max_subregion + 1)).fold(!0, |res, i| res & !(1 << i)) & 0xff,
                 );
 
-                address_value = region_start as u32;
+                address_value = underlying_region_start as u32;
                 size_value = exponent - 1;
 
                 debug!(
