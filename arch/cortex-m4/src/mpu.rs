@@ -470,6 +470,11 @@ impl kernel::mpu::MPU for MPU {
         // Calculate the log base two
         let mut exponent = math::log_base_two(region_len as u32);
 
+        if exponent < 5 {
+            // Region sizes must be 32 Bytes or larger
+            exponent = 5;
+            region_len = 32;
+        }
         if exponent > 32 {
             // Region sizes must be 4GB or smaller
             return None;
@@ -479,7 +484,7 @@ impl kernel::mpu::MPU for MPU {
         let size_value;
         let subregion_mask;
 
-        // There are three possibilities we support:
+        // There are two possibilities we support:
         //
         // 1. The base address is aligned exactly to the size of the region,
         //    which uses an MPU region with the exact base address and size of
@@ -494,11 +499,6 @@ impl kernel::mpu::MPU for MPU {
         // Case 1: Easy
         // Region start aligns to the length, so we can handle this normally!
         if region_start % region_len == 0 {
-            if exponent < 5 {
-                // Region sizes must be 32 Bytes or larger
-                exponent = 5;
-                region_len = 32;
-            }
             // Region length must not be bigger than parent size
             if region_len > parent_size {
                 return None;
@@ -510,8 +510,8 @@ impl kernel::mpu::MPU for MPU {
         // Case 2: Hard
         // Things get more difficult if the start doesn't align to the region length.
         // If the start aligns to the region length / 4, we can use a
-        // larger MPU region and expose only MPU subregions. Therefore, we 
-        // check if this is the case, and otherwise change start so that it is so
+        // larger MPU region and expose only MPU subregions. Therefore, we
+        // check if this is the case, and otherwise change start so that it does align to region length / 4
         // Note that if start aligns to region length / 8 but not to region length / 4,
         // it's impossible to create a valid region since for this 9 subregions
         // are required: 8 after the start for the region itself and one to
@@ -607,7 +607,7 @@ impl kernel::mpu::MPU for MPU {
         }
 
         // debug!("Region start: {:#X}", region_start);
-        // debug!("Region length: {}", region_len);      
+        // debug!("Region length: {}", region_len);
 
         let region_config = RegionConfig::new(
             address_value,
