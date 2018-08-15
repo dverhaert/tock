@@ -170,7 +170,7 @@ pub struct Region {
 
 impl Region {
     fn new(
-        start_address: u32,
+        address: u32,
         size: u32,
         region_num: u32,
         subregion_mask: Option<u32>,
@@ -199,9 +199,11 @@ impl Region {
         };
 
         // Base address register
-        let base_address = RegionBaseAddress::ADDR.val(start_address >> 5)
+        let base_address = RegionBaseAddress::ADDR.val(address >> 5)
             + RegionBaseAddress::VALID::UseRBAR
             + RegionBaseAddress::REGION.val(region_num);
+
+        let size = math::log_base_two(size) - 1;
 
         // Attributes register
         let mut attributes =
@@ -259,7 +261,7 @@ impl kernel::mpu::MPU for MPU {
         permissions: Permissions,
         config: &mut Self::MpuConfig,
     ) -> Option<(*const u8, usize)> {
-        // If the user has not specified enough memory for PAM and grant, round up and fix.
+        // Make sure there is enough memory for PAM and grant // TODO: include grant in min_app?
         let app_ram_size = if min_app_ram_size < initial_pam_size + initial_grant_size {
             initial_pam_size + initial_grant_size
         } else {
@@ -275,20 +277,15 @@ impl kernel::mpu::MPU for MPU {
         // We'll go through this code with some numeric examples, and
         // indicate this by EX.
         let mut region_len = math::closest_power_of_two(app_ram_size as u32) as usize;
-        let mut exponent = math::log_base_two(region_len as u32);
-
-        //debug!("Region len: {}", region_len);
-
+        let exponent = math::log_base_two(region_len as u32);
+        
         if exponent < 8 {
             // Region sizes must be 256 Bytes or larger in order to support subregions
-            exponent = 8;
             region_len = 256;
         } else if exponent > 32 {
             // Region sizes must be 4GB or smaller
             return None;
         }
-
-        //debug!("Region len: {}", region_len);
 
         // Preferably, the region will start at the start of the parent region
         let mut region_start = parent_start as usize;
@@ -322,28 +319,20 @@ impl kernel::mpu::MPU for MPU {
                                 //let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
 
         //debug!("Subregions used: {}", subregions_used);
-
-        let address_value = region_start as u32;
-        let size_value = exponent - 1;        
-
-        let region = Region::new(
-            address_value,
-            size_value,
-            PAM_REGION_NUM as u32,
-            Some(subregion_mask),
-            permissions,
-        );
-
-        //debug!("Arg0: {:#b}", region_start);
-        //debug!("Arg1: {}", region_len_value);
-        //debug!("Arg2: {}", 1);
-        //
-
+        
         let memory_info = ProcessMemoryInfo {
             memory_start: region_start as *const u8,
             memory_size: region_len,
             pam_permissions: permissions,
         };
+
+        let region = Region::new(
+            region_start as u32,
+            region_len as u32,
+            PAM_REGION_NUM as u32,
+            Some(subregion_mask),
+            permissions,
+        );
 
         config.memory_info = Some(memory_info);
         config.regions[PAM_REGION_NUM] = region;
@@ -400,11 +389,9 @@ impl kernel::mpu::MPU for MPU {
         //let subregion_mask = (0..8).fold(!0, |res, i| res & !(1 << i)) & 0xff;
         let subregion_mask = 0;
 
-        let region_size = math::log_base_two(region_len) - 1;
-
         let region = Region::new(
             region_start,
-            region_size,
+            region_len,
             PAM_REGION_NUM as u32,
             Some(subregion_mask),
             permissions,
@@ -480,7 +467,7 @@ impl kernel::mpu::MPU for MPU {
                 return None;
             }
             address_value = region_start as u32;
-            size_value = exponent - 1;
+            size_value = region_len;
             subregion_mask = None;
         }
         // Case 2: Hard
@@ -511,7 +498,7 @@ impl kernel::mpu::MPU for MPU {
             // be it with or without subregions. Check for both.
             if region_start % region_len == 0 {
                 address_value = region_start as u32;
-                size_value = exponent - 1;
+                size_value = region_len;
                 subregion_mask = None;
             } else {
                 // Memory base not aligned to memory size
@@ -532,8 +519,6 @@ impl kernel::mpu::MPU for MPU {
                 // address below `region_start` that aligns with the region size.
                 let underlying_region_start =
                     region_start - (region_start % underlying_region_size);
-
-                exponent = math::log_base_two(underlying_region_size as u32);
 
                 if underlying_region_size + underlying_region_start - region_start < region_len {
                     // Basically, check if the length from region_start until
@@ -571,7 +556,7 @@ impl kernel::mpu::MPU for MPU {
                 );
 
                 address_value = underlying_region_start as u32;
-                size_value = exponent - 1;
+                size_value = underlying_region_size;
 
                 // debug!(
                 //     "Subregions used: {} through {}",
@@ -587,7 +572,7 @@ impl kernel::mpu::MPU for MPU {
 
         let region = Region::new(
             address_value,
-            size_value,
+            size_value as u32,
             region_num as u32,
             subregion_mask,
             permissions,
