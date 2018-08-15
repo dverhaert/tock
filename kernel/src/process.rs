@@ -69,7 +69,7 @@ pub fn load_processes<S: UserspaceKernelBoundary, M: MPU>(
             }
 
             let total_memory_offset = memory_offset + memory_padding_offset;
-            
+
             apps_in_flash_ptr = apps_in_flash_ptr.offset(flash_offset as isize);
             app_memory_ptr = app_memory_ptr.offset(total_memory_offset as isize);
             app_memory_size -= total_memory_offset;
@@ -170,7 +170,7 @@ pub trait ProcessType {
     fn enable_mpu(&self);
 
     fn disable_mpu(&self);
-    
+
     fn setup_mpu(&self);
 
     fn add_mpu_region(&self, base: *const u8, size: u32) -> bool;
@@ -365,7 +365,7 @@ pub struct Process<'a, S: 'static + UserspaceKernelBoundary, M: 'static + MPU> {
 
     /// Pointer to the MPU
     mpu: &'static M,
-    
+
     /// Configuration data for the MPU
     mpu_config: MapCell<M::MpuConfig>,
 
@@ -562,7 +562,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
     fn enable_mpu(&self) {
         self.mpu.enable_mpu();
     }
-    
+
     fn disable_mpu(&self) {
         self.mpu.disable_mpu();
     }
@@ -638,7 +638,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
         }
         */
 
-        // Configure MPU 
+        // Configure MPU
         self.mpu_config.map(|config| {
             self.mpu.configure_mpu(&config);
         });
@@ -676,7 +676,11 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
             // TODO: remove
             } else if new_break > self.kernel_memory_break.get() {
                 Err(Error::OutOfMemory)
-            } else if let Err(_) = self.mpu.update_process_memory_layout(new_break, self.kernel_memory_break.get(), &mut config) {
+            } else if let Err(_) = self.mpu.update_process_memory_layout(
+                new_break,
+                self.kernel_memory_break.get(),
+                &mut config,
+            ) {
                 Err(Error::OutOfMemory)
             } else {
                 let old_break = self.app_break.get();
@@ -709,7 +713,10 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
             // TODO: remove
             if new_break < self.app_break.get() {
                 None
-            } else if let Err(_) = self.mpu.update_process_memory_layout(self.app_break.get(), new_break, &mut config) {
+            } else if let Err(_) =
+                self.mpu
+                    .update_process_memory_layout(self.app_break.get(), new_break, &mut config)
+            {
                 None
             } else {
                 self.kernel_memory_break.set(new_break);
@@ -1298,7 +1305,7 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
                     remaining_app_memory_size
                 );
             }
-            
+
             // Set up process memory
             let app_memory = slice::from_raw_parts_mut(memory_start as *mut u8, memory_size);
 
@@ -1405,7 +1412,12 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
 
             kernel.increment_work();
 
-            return (Some(process), app_flash_size, memory_size, memory_padding_size);
+            return (
+                Some(process),
+                app_flash_size,
+                memory_size,
+                memory_padding_size,
+            );
         }
         (None, 0, 0, 0)
     }
