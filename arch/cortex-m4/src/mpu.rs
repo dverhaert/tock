@@ -318,11 +318,11 @@ impl kernel::mpu::MPU for MPU {
         // eights of total region lengths.
         // EX: subregions_used = (3500 * 8)/8192 + 1 = 4;
         // TODO
-        // let subregions_used = (initial_pam_size * 8) as u32 / region_len + 1;
+        let subregions_used = (initial_pam_size * 8) as u32 / region_len + 1;
 
         // EX: 00001111 & 11111111 = 00001111 --> Use the first four subregions (0 = enable)
         let subregion_mask = 0; //TODO
-                                //let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+        //let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
 
         //debug!("Subregions used: {}", subregions_used);
 
@@ -393,10 +393,11 @@ impl kernel::mpu::MPU for MPU {
         // TODO: Measure execution time of these operations. Maybe we can get some optimizations in the future.
         let num_subregions_used = (pam_len * 8) as u32 / region_len + 1;
 
-        return Ok(()); // TODO
+        //return Ok(()); // TODO
 
-        let subregion_mask = (0..num_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+        //let subregion_mask = (0..num_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
         //let subregion_mask = (0..8).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+        let subregion_mask = 0;
 
         let region_size = math::log_base_two(region_len) - 1;
 

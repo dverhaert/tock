@@ -669,6 +669,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
     }
 
     fn brk(&self, new_break: *const u8) -> Result<*const u8, Error> {
+        //debug!("Brk called, with request {:#X}", new_break as usize);
         match self.mpu_config.map(|mut config| {
             if new_break < self.mem_start() || new_break >= self.mem_end() {
                 Err(Error::AddressOutOfBounds)
@@ -680,6 +681,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
             } else {
                 let old_break = self.app_break.get();
                 self.app_break.set(new_break);
+                self.mpu.configure_mpu(&mut config);
                 Ok(old_break)
             }
         }) {
