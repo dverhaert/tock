@@ -123,35 +123,34 @@ pub struct MPU(StaticRef<MpuRegisters>);
 
 impl MPU {
     pub const unsafe fn new() -> MPU {
-        MPU(MPU_BASE_ADDRESS) // TODO: remove hack: this should not be stored here.
+        MPU(MPU_BASE_ADDRESS)
     }
 }
 
 #[derive(Copy, Clone)]
 pub struct CortexMConfig {
     memory_info: Option<ProcessMemoryInfo>,
-    pam_region: RegionConfig,
-    regions: [RegionConfig; 7],
-    num_regions_used: usize,
+    regions: [Region; 8],
+    next_region_num: usize,
 }
 
-const PAM_REGION_NUM: usize = 7;
+const PAM_REGION_NUM: usize = 0;
 
 impl Default for CortexMConfig {
     fn default() -> CortexMConfig {
         CortexMConfig {
             memory_info: None,
-            pam_region: RegionConfig::empty(7),
             regions: [
-                RegionConfig::empty(0),
-                RegionConfig::empty(1),
-                RegionConfig::empty(2),
-                RegionConfig::empty(3),
-                RegionConfig::empty(4),
-                RegionConfig::empty(5),
-                RegionConfig::empty(6),
+                Region::empty(0),
+                Region::empty(1),
+                Region::empty(2),
+                Region::empty(3),
+                Region::empty(4),
+                Region::empty(5),
+                Region::empty(6),
+                Region::empty(7),
             ],
-            num_regions_used: 0,
+            next_region_num: 1,   // Index 0 is reserved for PAM
         }
     }
 }
@@ -163,22 +162,21 @@ pub struct ProcessMemoryInfo {
     pam_permissions: Permissions,
 }
 
-/// Struct containing the register values to be written
 #[derive(Copy, Clone)]
-pub struct RegionConfig {
+pub struct Region {
     base_address: FieldValue<u32, RegionBaseAddress::Register>,
     attributes: FieldValue<u32, RegionAttributes::Register>,
 }
 
-impl RegionConfig {
+impl Region {
     fn new(
-        address: u32,
+        start_address: u32,
         size: u32,
         region_num: u32,
         subregion_mask: Option<u32>,
         permissions: Permissions,
-    ) -> RegionConfig {
-        // Matching permissions with register values
+    ) -> Region {
+        // Determine access and execute permissions
         let (access, execute) = match permissions {
             Permissions::ReadWriteExecute => (
                 RegionAttributes::AP::ReadWrite,
@@ -200,28 +198,28 @@ impl RegionConfig {
             }
         };
 
-        // Address register field only takes the 27 MSB TODO
-        let base_address = RegionBaseAddress::ADDR.val(address >> 5)
+        // Base address register
+        let base_address = RegionBaseAddress::ADDR.val(start_address >> 5)
             + RegionBaseAddress::VALID::UseRBAR
             + RegionBaseAddress::REGION.val(region_num);
 
-        // Write region size and permissions
+        // Attributes register
         let mut attributes =
             RegionAttributes::ENABLE::SET + RegionAttributes::SIZE.val(size) + access + execute;
 
-        // If subregions enabled, write them to register
+        // If using subregions, add the mask
         if let Some(mask) = subregion_mask {
             attributes += RegionAttributes::SRD.val(mask);
         }
 
-        RegionConfig {
+        Region {
             base_address,
             attributes,
         }
     }
 
-    fn empty(region_num: u32) -> RegionConfig {
-        RegionConfig {
+    fn empty(region_num: u32) -> Region {
+        Region {
             base_address: RegionBaseAddress::VALID::UseRBAR
                 + RegionBaseAddress::REGION.val(region_num),
             attributes: RegionAttributes::ENABLE::CLEAR,
@@ -329,7 +327,7 @@ impl kernel::mpu::MPU for MPU {
 
         //debug!("Exponent: {}", exponent);
 
-        let region_config = RegionConfig::new(
+        let region_config = Region::new(
             region_start,
             region_size,
             PAM_REGION_NUM as u32,
@@ -349,7 +347,7 @@ impl kernel::mpu::MPU for MPU {
         };
 
         config.memory_info = Some(memory_info);
-        config.pam_region = region_config;
+        config.regions[PAM_REGION_NUM] = region_config;
 
         // TODO: do this in config and set PAM region to region 0. Two reasons:
         // (1) More logical to increment the number of used regions when setting up the PAM
@@ -405,7 +403,7 @@ impl kernel::mpu::MPU for MPU {
 
         let region_size = math::log_base_two(region_len) - 1;
 
-        let region_config = RegionConfig::new(
+        let region_config = Region::new(
             region_start,
             region_size,
             PAM_REGION_NUM as u32,
@@ -413,7 +411,7 @@ impl kernel::mpu::MPU for MPU {
             permissions,
         );
 
-        config.pam_region = region_config;
+        config.regions[PAM_REGION_NUM] = region_config;
 
         Ok(())
     }
@@ -426,7 +424,7 @@ impl kernel::mpu::MPU for MPU {
         permissions: Permissions,
         config: &mut Self::MpuConfig,
     ) -> Option<(*const u8, usize)> {
-        let region_num = config.num_regions_used;
+        let region_num = config.next_region_num;
 
         // Only 8 regions supported
         if region_num >= 8 {
@@ -588,7 +586,7 @@ impl kernel::mpu::MPU for MPU {
         // debug!("Region start: {:#X}", region_start);
         // debug!("Region length: {}", region_len);
 
-        let region_config = RegionConfig::new(
+        let region_config = Region::new(
             address_value,
             size_value,
             region_num as u32,
@@ -597,7 +595,7 @@ impl kernel::mpu::MPU for MPU {
         );
 
         config.regions[region_num] = region_config;
-        config.num_regions_used += 1;
+        config.next_region_num += 1;
 
         Some((region_start as *const u8, region_len))
     }
@@ -610,9 +608,5 @@ impl kernel::mpu::MPU for MPU {
             regs.rbar.write(region_config.base_address);
             regs.rasr.write(region_config.attributes);
         }
-
-        // Set PAM MPU region
-        regs.rbar.write(config.pam_region.base_address);
-        regs.rasr.write(config.pam_region.attributes);
     }
 }
