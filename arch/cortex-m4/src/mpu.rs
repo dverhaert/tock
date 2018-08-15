@@ -326,7 +326,7 @@ impl kernel::mpu::MPU for MPU {
         let address_value = region_start as u32;
         let size_value = exponent - 1;        
 
-        let region_config = Region::new(
+        let region = Region::new(
             address_value,
             size_value,
             PAM_REGION_NUM as u32,
@@ -346,14 +346,14 @@ impl kernel::mpu::MPU for MPU {
         };
 
         config.memory_info = Some(memory_info);
-        config.regions[PAM_REGION_NUM] = region_config;
+        config.regions[PAM_REGION_NUM] = region;
 
         // TODO: do this in config and set PAM region to region 0. Two reasons:
         // (1) More logical to increment the number of used regions when setting up the PAM
         // (2) On future addition of overlapping regions (e.g. it becomes necessary to add a small grant region), this region will have higher priority because the Cortex-M orders region priorities by their index
         // let region_num = config.num_regions_used;
         // debug!("regions used: {}", region_num);
-        // config.regions[region_num] = region_config;
+        // config.regions[region_num] = region;
         // config.num_regions_used += 1;
 
         Some((region_start as *const u8, region_len))
@@ -402,7 +402,7 @@ impl kernel::mpu::MPU for MPU {
 
         let region_size = math::log_base_two(region_len) - 1;
 
-        let region_config = Region::new(
+        let region = Region::new(
             region_start,
             region_size,
             PAM_REGION_NUM as u32,
@@ -410,7 +410,7 @@ impl kernel::mpu::MPU for MPU {
             permissions,
         );
 
-        config.regions[PAM_REGION_NUM] = region_config;
+        config.regions[PAM_REGION_NUM] = region;
 
         Ok(())
     }
@@ -585,7 +585,7 @@ impl kernel::mpu::MPU for MPU {
         // debug!("Region start: {:#X}", region_start);
         // debug!("Region length: {}", region_len);
 
-        let region_config = Region::new(
+        let region = Region::new(
             address_value,
             size_value,
             region_num as u32,
@@ -593,7 +593,7 @@ impl kernel::mpu::MPU for MPU {
             permissions,
         );
 
-        config.regions[region_num] = region_config;
+        config.regions[region_num] = region;
         config.next_region_num += 1;
 
         Some((region_start as *const u8, region_len))
@@ -603,9 +603,9 @@ impl kernel::mpu::MPU for MPU {
         let regs = &*self.0;
 
         // Set MPU regions
-        for region_config in config.regions.iter() {
-            regs.rbar.write(region_config.base_address);
-            regs.rasr.write(region_config.attributes);
+        for region in config.regions.iter() {
+            regs.rbar.write(region.base_address);
+            regs.rasr.write(region.attributes);
         }
     }
 }
