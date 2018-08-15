@@ -511,87 +511,75 @@ impl kernel::mpu::MPU for MPU {
             size_value = exponent - 1;
             subregion_mask = None;
         }
-        // Case 2: Moderate
+        // REDUNDANT! Case 2: Moderate
         // Region is significantly small so that we can't make use of
         // subregions, but the region start doesn't align to the region length.
         // In this case, we try to find a start for which it does.
-        else if region_start % region_len != 0 && exponent < 7 {
-            if exponent < 5 {
-                // Region sizes must be 32 Bytes or larger
-                exponent = 5;
-                region_len = 32;
-            }
-            // Sanity check: region length must not be bigger than parent size
-            if region_len > parent_size {
-                return None;
-            }
-            let mut result = 0;
-            let mut x = region_start;
-            while x < (parent_end - region_len) {
-                // debug!("x = {}", x);
-                if x % (region_len) == 0 {
-                    region_start = x;
-                    result = 1;
-                    break;
-                }
-                x += 32;
-            }
-            // No region could be found within the parent region and with
-            // region_len which suffices Cortex-M requirements. Either the
-            // parent size should be bigger/differently located, or the regopm
-            // length (and so min_app_ram_size) should be smaller
-            if result == 0 {
-                debug!("No region could be found within the parent region and with region_len which suffices Cortex-M requirements.");
-                return None;
-            }
-            address_value = region_start as u32;
-            size_value = exponent - 1;
-            subregion_mask = None;
-        }
+        // else if region_start % region_len != 0 && exponent < 7 {
+        //     if exponent < 5 {
+        //         // Region sizes must be 32 Bytes or larger
+        //         exponent = 5;
+        //         region_len = 32;
+        //     }
+        //     // Sanity check: region length must not be bigger than parent size
+        //     if region_len > parent_size {
+        //         return None;
+        //     }
+        //     let mut result = 0;
+        //     let mut x = region_start;
+        //     while x < (parent_end - region_len) {
+        //         // debug!("x = {}", x);
+        //         if x % (region_len) == 0 {
+        //             region_start = x;
+        //             result = 1;
+        //             break;
+        //         }
+        //         x += 32;
+        //     }
+        //     // No region could be found within the parent region and with
+        //     // region_len which suffices Cortex-M requirements. Either the
+        //     // parent size should be bigger/differently located, or the regopm
+        //     // length (and so min_app_ram_size) should be smaller
+        //     if result == 0 {
+        //         debug!("No region could be found within the parent region and with region_len which suffices Cortex-M requirements.");
+        //         return None;
+        //     }
+        //     address_value = region_start as u32;
+        //     size_value = exponent - 1;
+        //     subregion_mask = None;
+        // }
         // Case 3: Hard
-        // Things get more difficult if the start doesn't align to the length.
-        // If the start still aligns to the region length / 4, we can use a
-        // larger MPU region and expose only MPU subregions.
+        // Things get more difficult if the start doesn't align to the region length.
+        // If the start aligns to the region length / 4, we can use a
+        // larger MPU region and expose only MPU subregions. Therefore, we 
+        // check if this is the case, and otherwise change start so that it is so
         // Note that if start aligns to region length / 8 but not to region length / 4,
         // it's impossible to create a valid region since for this 9 subregions
         // are required: 8 after the start for the region itself and one to
         // before the start to align it.
         else {
-            // if region_start % region_len != 0 && exponent >= 7
-            // Region sizes must be > 128 Bytes in order to support subregions.
-
-            // Region start always has to align to at least 128 bits. If it
-            // doesn't, move it up
-            if region_start % 128 != 0 {
-                region_start += 128 - (region_start % 128);
-            }
-
-            // Check to make sure we're still within parent after rounding up to 128
-            if region_start + region_len > parent_end {
-                return None;
-            }
-
             // If the start doesn't align to the region length / 4, this means
             // start will have to be changed
             if region_start % (region_len / 4) != 0 {
+                region_start += (region_len / 4) - (region_start % (region_len / 4));
                 // Move start so that it aligns with region_len / 4.
-                let mut x = region_start;
-                let mut result = 0;
-                while x < (parent_end - region_len) {
-                    // debug!("x = {}", x);
-                    if x % (region_len / 4) == 0 {
-                        // debug!("Success! Breaking");
-                        region_start = x;
-                        result = 1;
-                        break;
-                    }
-                    x += 128;
-                }
+                // let mut x = region_start;
+                // let mut result = 0;
+                // while x < (parent_end - region_len) {
+                //     // debug!("x = {}", x);
+                //     if x % (region_len / 4) == 0 {
+                //         // debug!("Success! Breaking");
+                //         region_start = x;
+                //         result = 1;
+                //         break;
+                //     }
+                //     x += 32;
+                // }
                 // No region could be found within the parent region and with
                 // region_len which suffices Cortex-M requirements. Either the
                 // parent size should be bigger/differently located, or the
                 // region length (and so min_app_ram_size) should be smaller
-                if result == 0 {
+                if region_start + region_len > parent_end {
                     debug!("No region could be found within the parent region and with region_len which suffices Cortex-M requirements.");
                     return None;
                 }
