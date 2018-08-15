@@ -1,7 +1,6 @@
 //! Implementation of the ARM memory protection unit.
 
 use kernel;
-use kernel::common::cells::MapCell;
 use kernel::common::math;
 use kernel::common::math::PowerOfTwo;
 use kernel::common::registers::{FieldValue, ReadOnly, ReadWrite};
@@ -360,7 +359,6 @@ impl kernel::mpu::MPU for MPU {
         // debug!("regions used: {}", region_num);
         // config.regions[region_num] = region_config;
         // config.num_regions_used += 1;
-        */
 
         Some((region_start as *const u8, region_len as usize))
     }

@@ -669,14 +669,22 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
     }
 
     fn brk(&self, new_break: *const u8) -> Result<*const u8, Error> {
-        if new_break < self.mem_start() || new_break >= self.mem_end() {
-            Err(Error::AddressOutOfBounds)
-        } else if new_break > self.kernel_memory_break.get() {
-            Err(Error::OutOfMemory)
-        } else {
-            let old_break = self.app_break.get();
-            self.app_break.set(new_break);
-            Ok(old_break)
+        match self.mpu_config.map(|mut config| {
+            if new_break < self.mem_start() || new_break >= self.mem_end() {
+                Err(Error::AddressOutOfBounds)
+            // TODO: remove
+            } else if new_break > self.kernel_memory_break.get() {
+                Err(Error::OutOfMemory)
+            } else if let Err(_) = self.mpu.update_process_memory_layout(new_break, self.kernel_memory_break.get(), &mut config) {
+                Err(Error::OutOfMemory)
+            } else {
+                let old_break = self.app_break.get();
+                self.app_break.set(new_break);
+                Ok(old_break)
+            }
+        }) {
+            Some(error) => error,
+            None => panic!("MPU config not found."),
         }
     }
 
@@ -694,12 +702,20 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
     }
 
     unsafe fn alloc(&self, size: usize) -> Option<&mut [u8]> {
-        let new_break = self.kernel_memory_break.get().offset(-(size as isize));
-        if new_break < self.app_break.get() {
-            None
-        } else {
-            self.kernel_memory_break.set(new_break);
-            Some(slice::from_raw_parts_mut(new_break as *mut u8, size))
+        match self.mpu_config.map(|mut config| {
+            let new_break = self.kernel_memory_break.get().offset(-(size as isize));
+            // TODO: remove
+            if new_break < self.app_break.get() {
+                None
+            } else if let Err(_) = self.mpu.update_process_memory_layout(self.app_break.get(), new_break, &mut config) {
+                None
+            } else {
+                self.kernel_memory_break.set(new_break);
+                Some(slice::from_raw_parts_mut(new_break as *mut u8, size))
+            }
+        }) {
+            Some(option) => option,
+            None => panic!("MPU config not found."),
         }
     }
 
