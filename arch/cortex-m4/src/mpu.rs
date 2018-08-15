@@ -486,11 +486,7 @@ impl kernel::mpu::MPU for MPU {
         //    the memory region. In this case, we just do some basic checks
         //    after which we write to the registers.
         //
-        // 2. Region is significantly small so that we can't make use of
-        //    subregions, but the region start doesn't align to the region length.
-        //    In this case, we try to find a start for which it does.
-        //
-        // 3. Otherwise, we can use a larger MPU region and expose only MPU
+        // 2. Otherwise, we can use a larger MPU region and expose only MPU
         //    subregions, as long as the memory region's base address is aligned
         //    to 1/8th of a larger underlying region size.
         //
@@ -511,44 +507,7 @@ impl kernel::mpu::MPU for MPU {
             size_value = exponent - 1;
             subregion_mask = None;
         }
-        // REDUNDANT! Case 2: Moderate
-        // Region is significantly small so that we can't make use of
-        // subregions, but the region start doesn't align to the region length.
-        // In this case, we try to find a start for which it does.
-        // else if region_start % region_len != 0 && exponent < 7 {
-        //     if exponent < 5 {
-        //         // Region sizes must be 32 Bytes or larger
-        //         exponent = 5;
-        //         region_len = 32;
-        //     }
-        //     // Sanity check: region length must not be bigger than parent size
-        //     if region_len > parent_size {
-        //         return None;
-        //     }
-        //     let mut result = 0;
-        //     let mut x = region_start;
-        //     while x < (parent_end - region_len) {
-        //         // debug!("x = {}", x);
-        //         if x % (region_len) == 0 {
-        //             region_start = x;
-        //             result = 1;
-        //             break;
-        //         }
-        //         x += 32;
-        //     }
-        //     // No region could be found within the parent region and with
-        //     // region_len which suffices Cortex-M requirements. Either the
-        //     // parent size should be bigger/differently located, or the regopm
-        //     // length (and so min_app_ram_size) should be smaller
-        //     if result == 0 {
-        //         debug!("No region could be found within the parent region and with region_len which suffices Cortex-M requirements.");
-        //         return None;
-        //     }
-        //     address_value = region_start as u32;
-        //     size_value = exponent - 1;
-        //     subregion_mask = None;
-        // }
-        // Case 3: Hard
+        // Case 2: Hard
         // Things get more difficult if the start doesn't align to the region length.
         // If the start aligns to the region length / 4, we can use a
         // larger MPU region and expose only MPU subregions. Therefore, we 
@@ -562,20 +521,7 @@ impl kernel::mpu::MPU for MPU {
             // start will have to be changed
             if region_start % (region_len / 4) != 0 {
                 region_start += (region_len / 4) - (region_start % (region_len / 4));
-                // Move start so that it aligns with region_len / 4.
-                // let mut x = region_start;
-                // let mut result = 0;
-                // while x < (parent_end - region_len) {
-                //     // debug!("x = {}", x);
-                //     if x % (region_len / 4) == 0 {
-                //         // debug!("Success! Breaking");
-                //         region_start = x;
-                //         result = 1;
-                //         break;
-                //     }
-                //     x += 32;
-                // }
-                // No region could be found within the parent region and with
+                // No valid region could be found within the parent region and with
                 // region_len which suffices Cortex-M requirements. Either the
                 // parent size should be bigger/differently located, or the
                 // region length (and so min_app_ram_size) should be smaller
@@ -600,18 +546,7 @@ impl kernel::mpu::MPU for MPU {
                 // address with exactly one bit:
                 //
                 //      1 << (region_start.trailing_zeros())
-                let subregion_size = {
-                    let tz = region_start.trailing_zeros();
-                    // `region_start` should never be 0 because of that's taken care of by
-                    // the previous branch, but in case it is, do the right thing
-                    // anyway.
-                    if tz < 32 {
-                        (1 as usize) << tz
-                    // TODO: Remove another useless sanity check?
-                    } else {
-                        0
-                    }
-                };
+                let subregion_size = (1 as usize) << region_start.trailing_zeros();
 
                 // Once we have a subregion size, we get an underlying region size by
                 // multiplying it by the number of subregions per region.
@@ -662,17 +597,17 @@ impl kernel::mpu::MPU for MPU {
                 address_value = underlying_region_start as u32;
                 size_value = exponent - 1;
 
-                debug!(
-                    "Subregions used: {} through {}",
-                    min_subregion, max_subregion
-                );
-                debug!("Underlying region start address: {:#X}", address_value);
-                debug!("Underlying region size: {}", size_value);
+                // debug!(
+                //     "Subregions used: {} through {}",
+                //     min_subregion, max_subregion
+                // );
+                // debug!("Underlying region start address: {:#X}", address_value);
+                // debug!("Underlying region size: {}", size_value);
             }
         }
 
-        debug!("Region start: {:#X}", region_start);
-        debug!("Region length: {}", region_len);      
+        // debug!("Region start: {:#X}", region_start);
+        // debug!("Region length: {}", region_len);      
 
         let region_config = RegionConfig::new(
             address_value,
