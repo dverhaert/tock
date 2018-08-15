@@ -274,15 +274,15 @@ impl kernel::mpu::MPU for MPU {
 
         // We'll go through this code with some numeric examples, and
         // indicate this by EX.
-        let mut region_len = math::closest_power_of_two(app_ram_size as u32);
-        let mut exponent = math::log_base_two(region_len);
+        let mut region_len = math::closest_power_of_two(app_ram_size as u32) as usize;
+        let mut exponent = math::log_base_two(region_len as u32);
 
         //debug!("Region len: {}", region_len);
 
-        if exponent < 7 {
-            // Region sizes must be 128 Bytes or larger in order to support subregions
-            exponent = 7;
-            region_len = 128;
+        if exponent < 8 {
+            // Region sizes must be 256 Bytes or larger in order to support subregions
+            exponent = 8;
+            region_len = 256;
         } else if exponent > 32 {
             // Region sizes must be 4GB or smaller
             return None;
@@ -291,7 +291,7 @@ impl kernel::mpu::MPU for MPU {
         //debug!("Region len: {}", region_len);
 
         // Preferably, the region will start at the start of the parent region
-        let mut region_start = parent_start as u32;
+        let mut region_start = parent_start as usize;
 
         // If the start doesn't align to the length, move region start up until it does
         if region_start % region_len != 0 {
@@ -299,7 +299,7 @@ impl kernel::mpu::MPU for MPU {
         }
 
         // Make sure that the requested region fits in memory
-        let parent_end = (parent_start) as u32 + (parent_size as u32);
+        let parent_end = parent_start as usize + parent_size;
         if region_start + region_len > parent_end {
             //debug!("Requested region doesn't fit in memory");
             return None;
@@ -315,7 +315,7 @@ impl kernel::mpu::MPU for MPU {
         // eights of total region lengths.
         // EX: subregions_used = (3500 * 8)/8192 + 1 = 4;
         // TODO
-        let subregions_used = (initial_pam_size * 8) as u32 / region_len + 1;
+        let subregions_used = (initial_pam_size * 8) / region_len + 1;
 
         // EX: 00001111 & 11111111 = 00001111 --> Use the first four subregions (0 = enable)
         let subregion_mask = 0; //TODO
@@ -323,13 +323,12 @@ impl kernel::mpu::MPU for MPU {
 
         //debug!("Subregions used: {}", subregions_used);
 
-        let region_size = exponent - 1;
-
-        //debug!("Exponent: {}", exponent);
+        let address_value = region_start as u32;
+        let size_value = exponent - 1;        
 
         let region_config = Region::new(
-            region_start,
-            region_size,
+            address_value,
+            size_value,
             PAM_REGION_NUM as u32,
             Some(subregion_mask),
             permissions,
@@ -342,7 +341,7 @@ impl kernel::mpu::MPU for MPU {
 
         let memory_info = ProcessMemoryInfo {
             memory_start: region_start as *const u8,
-            memory_size: region_len as usize,
+            memory_size: region_len,
             pam_permissions: permissions,
         };
 
@@ -357,7 +356,7 @@ impl kernel::mpu::MPU for MPU {
         // config.regions[region_num] = region_config;
         // config.num_regions_used += 1;
 
-        Some((region_start as *const u8, region_len as usize))
+        Some((region_start as *const u8, region_len))
     }
 
     fn update_process_memory_layout(
