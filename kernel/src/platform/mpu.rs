@@ -27,7 +27,7 @@ pub trait MPU {
     /// covering the app-owned portion.
     ///
     /// An implementation must allocate a contiguous block of memory that is at
-    /// least `min_total_memory_size` bytes in size and lies completely within the
+    /// least `min_memory_size` bytes in size and lies completely within the
     /// specified parent region. 
     ///
     /// It must also allocate an MPU region with the following properties:
@@ -47,7 +47,7 @@ pub trait MPU {
     ///
     /// `parent_start`              : start of the parent region
     /// `parent_size`               : size of the parent region
-    /// `min_total_memory_size`     : minimum total memory to allocate for process
+    /// `min_memory_size`           : minimum total memory to allocate for process
     /// `initial_app_memory_size`   : initial size for app memory
     /// `initial_kernel_memory_size`: initial size for kernel memory 
     /// `permissions`               : permissions for the MPU region
@@ -63,23 +63,23 @@ pub trait MPU {
         &self,
         parent_start: *const u8,
         parent_size: usize,
-        min_total_memory_size: usize,
+        min_memory_size: usize,
         initial_app_memory_size: usize,
         initial_kernel_memory_size: usize,
         permissions: Permissions,
         config: &mut Self::MpuConfig,
     ) -> Option<(*const u8, usize)> {
-        let total_memory_size = {
-            if min_total_memory_size < initial_app_memory_size + initial_kernel_memory_size {
+        let memory_size = {
+            if min_memory_size < initial_app_memory_size + initial_kernel_memory_size {
                 initial_app_memory_size + initial_kernel_memory_size
             } else {
-                min_total_memory_size
+                min_memory_size
             }
         };
-        if total_memory_size > parent_size {
+        if memory_size > parent_size {
             None
         } else {
-            Some((parent_start, total_memory_size))
+            Some((parent_start, memory_size))
         }
     }
 

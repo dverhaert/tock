@@ -255,17 +255,19 @@ impl kernel::mpu::MPU for MPU {
         &self,
         parent_start: *const u8,
         parent_size: usize,
-        min_app_ram_size: usize,
-        initial_pam_size: usize,
-        initial_grant_size: usize,
+        min_memory_size: usize,
+        initial_app_memory_size: usize,
+        initial_kernel_memory_size: usize,
         permissions: Permissions,
         config: &mut Self::MpuConfig,
     ) -> Option<(*const u8, usize)> {
         // Make sure there is enough memory for PAM and grant // TODO: include grant in min_app?
-        let app_ram_size = if min_app_ram_size < initial_pam_size + initial_grant_size {
-            initial_pam_size + initial_grant_size
-        } else {
-            min_app_ram_size
+        let memory_size = {
+            if min_memory_size < initial_app_memory_size + initial_kernel_memory_size {
+                initial_app_memory_size + initial_kernel_memory_size
+            } else {
+                min_memory_size
+            }
         };
 
         // Some statements for debugging. Will be removed on PR.
@@ -276,7 +278,7 @@ impl kernel::mpu::MPU for MPU {
 
         // We'll go through this code with some numeric examples, and
         // indicate this by EX.
-        let mut region_len = math::closest_power_of_two(app_ram_size as u32) as usize;
+        let mut region_len = math::closest_power_of_two(memory_size as u32) as usize;
         let exponent = math::log_base_two(region_len as u32);
         
         if exponent < 8 {
@@ -312,7 +314,7 @@ impl kernel::mpu::MPU for MPU {
         // eights of total region lengths.
         // EX: subregions_used = (3500 * 8)/8192 + 1 = 4;
         // TODO
-        let subregions_used = (initial_pam_size * 8) / region_len + 1;
+        let subregions_used = (initial_app_memory_size * 8) / region_len + 1;
 
         // EX: 00001111 & 11111111 = 00001111 --> Use the first four subregions (0 = enable)
         let subregion_mask = 0; //TODO
