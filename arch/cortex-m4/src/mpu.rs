@@ -445,9 +445,7 @@ impl kernel::mpu::MPU for MPU {
             return None;
         }
 
-        let address_value;
-        let size_value;
-        let subregion_mask;
+        let mut subregion_mask = None;
 
         // There are two possibilities we support:
         //
@@ -463,14 +461,12 @@ impl kernel::mpu::MPU for MPU {
 
         // Case 1: Easy
         // Region start aligns to the length, so we can handle this normally!
+        // Only need to check if the region size is not greater than the parent size.
         if region_start % region_size == 0 {
             // Region length must not be bigger than parent size
             if region_size > parent_size {
                 return None;
             }
-            address_value = region_start as u32;
-            size_value = region_size;
-            subregion_mask = None;
         }
         // Case 2: Hard
         // Things get more difficult if the start doesn't align to the region length.
@@ -497,12 +493,9 @@ impl kernel::mpu::MPU for MPU {
             }
 
             // We have now found an address which can definitely be supported,
-            // be it with or without subregions. Check for both.
-            if region_start % region_size == 0 {
-                address_value = region_start as u32;
-                size_value = region_size;
-                subregion_mask = None;
-            } else {
+            // be it with or without subregions. If it perfectly aligns, we're 
+            // done. Otherwise, create with subregions.
+            if region_start % region_size != 0 {
                 // Memory base not aligned to memory size
                 // Which (power-of-two) subregion size would align with the base
                 // address?
@@ -539,8 +532,9 @@ impl kernel::mpu::MPU for MPU {
                     (min_subregion..(max_subregion + 1)).fold(!0, |res, i| res & !(1 << i)) & 0xff,
                 );
 
-                address_value = underlying_region_start as u32;
-                size_value = underlying_region_size;
+                // Prepare to write variables to Region
+                region_start = underlying_region_start;
+                region_size = underlying_region_size;
 
                 // debug!(
                 //     "Subregions used: {} through {}",
@@ -555,8 +549,8 @@ impl kernel::mpu::MPU for MPU {
         // debug!("Region length: {}", region_size);
 
         let region = Region::new(
-            address_value,
-            size_value as u32,
+            region_start as u32,
+            region_size as u32,
             region_num as u32,
             subregion_mask,
             permissions,
