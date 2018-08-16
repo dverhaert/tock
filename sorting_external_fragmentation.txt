@@ -1,0 +1,153 @@
+Kernel panic at /home/danilo/Documents/tock/kernel/src/process.rs:436:
+	"Process mpu_stack_growth had a fault"
+	Kernel version release-1.2-2018-06-597-g7f74009d
+
+---| Fault Status |---
+Data Access Violation:              true
+Memory Management Stacking Fault:   true
+Invalid PC Load Usage Fault:        true
+Forced Hard Fault:                  true
+Faulting Memory Address:            0x2000BFC8
+Fault Status Register (CFSR):       0x00040092
+Hard Fault Status Register (HFSR):  0x40000000
+
+---| App Status |---
+App: ip_sense   -   [Yielded]
+ Events Queued: 0   Syscall Count: 99   Dropped Callback Count: 0
+ Restart Count: 0
+ Last Syscall: Some(YIELD)
+
+ ╔═══════════╤══════════════════════════════════════════╗
+ ║  Address  │ Region Name    Used | Allocated (bytes)  ║
+ ╚0x20006000═╪══════════════════════════════════════════╝
+             │ ▼ Grant         784 |    784          
+  0x20005CF0 ┼───────────────────────────────────────────
+             │ Unused
+  0x20005124 ┼───────────────────────────────────────────
+             │ ▲ Heap         1608 |   4628               S
+  0x20004ADC ┼─────────────────────────────────────────── R
+             │ Data            732 |    732               A
+  0x20004800 ┼─────────────────────────────────────────── M
+             │ ▼ Stack         400 |   2048          
+  0x20004670 ┼───────────────────────────────────────────
+             │ Unused
+  0x20004000 ┴───────────────────────────────────────────
+             .....
+  0x00034000 ┬─────────────────────────────────────────── F
+             │ App Flash     16340                        L
+  0x0003002C ┼─────────────────────────────────────────── A
+             │ Protected        44                        S
+  0x00030000 ┴─────────────────────────────────────────── H
+
+  R0 : 0x00000005    R6 : 0x00000006
+  R1 : 0x00000006    R7 : 0x00000007
+  R2 : 0x00000007    R8 : 0x00000008
+  R3 : 0x00000008    R10: 0x0000000A
+  R4 : 0x00000004    R11: 0x0000000B
+  R5 : 0x00000005    R12: 0x00000009
+  R9 : 0x00000009 (Static Base Register)
+  SP : 0x20004740 (Process Stack Pointer)
+  LR : 0x0000000A
+  PC : 0x0000000B
+ YPC : 0x00000000
+
+ APSR: N 0 Z 0 C 0 V 0 Q 0
+       GE 0 0 0 0
+ EPSR: ICI.IT 0x00
+       ThumbBit false !!ERROR - Cortex M Thumb only!
+ To debug, run `make debug RAM_START=0x20004000 FLASH_INIT=0x30055`
+ in the app's folder and open the .lst file.
+
+App: crc   -   [Yielded]
+ Events Queued: 0   Syscall Count: 145   Dropped Callback Count: 0
+ Restart Count: 0
+ Last Syscall: Some(YIELD)
+
+ ╔═══════════╤══════════════════════════════════════════╗
+ ║  Address  │ Region Name    Used | Allocated (bytes)  ║
+ ╚0x2000C000═╪══════════════════════════════════════════╝
+             │ ▼ Grant         836 |    836          
+  0x2000BCBC ┼───────────────────────────────────────────
+             │ Unused
+  0x20009EF8 ┼───────────────────────────────────────────
+             │ ▲ Heap         1552 |   9172               S
+  0x200098E8 ┼─────────────────────────────────────────── R
+             │ Data           4328 |   4328               A
+  0x20008800 ┼─────────────────────────────────────────── M
+             │ ▼ Stack         336 |   2048          
+  0x200086B0 ┼───────────────────────────────────────────
+             │ Unused
+  0x20008000 ┴───────────────────────────────────────────
+             .....
+  0x00036000 ┬─────────────────────────────────────────── F
+             │ App Flash      8152                        L
+  0x00034028 ┼─────────────────────────────────────────── A
+             │ Protected        40                        S
+  0x00034000 ┴─────────────────────────────────────────── H
+
+  R0 : 0x00000005    R6 : 0x00000006
+  R1 : 0x00000006    R7 : 0x00000007
+  R2 : 0x00000007    R8 : 0x00000008
+  R3 : 0x00000008    R10: 0x0000000A
+  R4 : 0x00000004    R11: 0x0000000B
+  R5 : 0x00000005    R12: 0x00000009
+  R9 : 0x00000009 (Static Base Register)
+  SP : 0x200086E0 (Process Stack Pointer)
+  LR : 0x0000000A
+  PC : 0x0000000B
+ YPC : 0x00000000
+
+ APSR: N 0 Z 0 C 0 V 0 Q 0
+       GE 0 0 0 0
+ EPSR: ICI.IT 0x00
+       ThumbBit false !!ERROR - Cortex M Thumb only!
+ To debug, run `make debug RAM_START=0x20008000 FLASH_INIT=0x34051`
+ in the app's folder and open the .lst file.
+
+App: mpu_stack_growth   -   [Fault]
+ Events Queued: 0   Syscall Count: 74   Dropped Callback Count: 0
+ Restart Count: 0
+ Last Syscall: Some(YIELD)
+
+ ╔═══════════╤══════════════════════════════════════════╗
+ ║  Address  │ Region Name    Used | Allocated (bytes)  ║
+ ╚0x2000E000═╪══════════════════════════════════════════╝
+             │ ▼ Grant         760 |    760          
+  0x2000DD08 ┼───────────────────────────────────────────
+             │ Unused
+  0x2000D0C8 ┼───────────────────────────────────────────
+             │ ▲ Heap         1608 |   4744               S
+  0x2000CA80 ┼─────────────────────────────────────────── R
+             │ Data            640 |    640               A
+  0x2000C800 ┼─────────────────────────────────────────── M
+             │ ▼ Stack        2120 |   2048 EXCEEDED!
+  0x2000BFB8 ┼───────────────────────────────────────────
+             │ Unused
+  0x2000C000 ┴───────────────────────────────────────────
+             .....
+  0x00038000 ┬─────────────────────────────────────────── F
+             │ App Flash      8140                        L
+  0x00036034 ┼─────────────────────────────────────────── A
+             │ Protected        52                        S
+  0x00036000 ┴─────────────────────────────────────────── H
+
+  R0 : 0x00000005    R6 : 0x00000006
+  R1 : 0x00000006    R7 : 0x00000007
+  R2 : 0x00000007    R8 : 0x00000008
+  R3 : 0x00000008    R10: 0x0000000A
+  R4 : 0x00000004    R11: 0x0000000B
+  R5 : 0x00000005    R12: 0x00000009
+  R9 : 0x00000009 (Static Base Register)
+  SP : 0x2000BFB8 (Process Stack Pointer)
+  LR : 0x0000000A
+  PC : 0x0000000B
+ YPC : 0x00000000
+
+ APSR: N 0 Z 0 C 0 V 0 Q 0
+       GE 0 0 0 0
+ EPSR: ICI.IT 0x00
+       ThumbBit false !!ERROR - Cortex M Thumb only!
+ To debug, run `make debug RAM_START=0x2000c000 FLASH_INIT=0x3605d`
+ in the app's folder and open the .lst file.
+
+
