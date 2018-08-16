@@ -5,9 +5,9 @@ fn main() {
 
     // Algorithm test. Change the following three parameters at will and be amazed at the results.
     if let None = expose_memory_region(
-        0, // parent_start
-        256, // parent_size
-        32, // min_region_size
+        65, // parent_start
+        128, // parent_size
+        64, // min_region_size
     ) {
         println!("Failed, try again next time");
     }
@@ -41,6 +41,11 @@ fn main() {
         let mut floatexponent = f32::log2(region_len as f32);
         let mut exponent = floatexponent as usize;
 
+        if exponent < 5 {
+            // Region sizes must be 32 Bytes or larger
+            exponent = 5;
+            region_len = 32;
+        }
         if exponent > 32 {
             // Region sizes must be 4GB or smaller
             return None;
@@ -53,11 +58,7 @@ fn main() {
         //    the memory region. In this case, we just do some basic checks
         //    after which we write to the registers.
         //
-        // 2. Region is significantly small so that we can't make use of
-        //    subregions, but the region start doesn't align to the region length.
-        //    In this case, we try to find a start for which it does.
-        //
-        // 3. Otherwise, we can use a larger MPU region and expose only MPU
+        // 2. Otherwise, we can use a larger MPU region and expose only MPU
         //    subregions, as long as the memory region's base address is aligned
         //    to 1/8th of a larger underlying region size.
         //
@@ -65,51 +66,13 @@ fn main() {
         // Case 1: Easy
         // Region start aligns to the length, so we can handle this normally!
         if region_start % region_len == 0 {
-            if exponent < 5 {
-                // Region sizes must be 32 Bytes or larger
-                exponent = 5;
-                region_len = 32;
-            }
+
             // Region length must not be bigger than parent size
             if region_len > parent_size {
                 return None;
             }
         }
-        // Case 2: Moderate
-        // Region is significantly small so that we can't make use of
-        // subregions, but the region start doesn't align to the region length.
-        // In this case, we try to find a start for which it does.
-        else if region_start % region_len != 0 && exponent < 7 {
-            if exponent < 5 {
-                // Region sizes must be 32 Bytes or larger
-                exponent = 5;
-                region_len = 32;
-            }
-            // Sanity check: region length must not be bigger than parent size
-            if region_len > parent_size {
-                return None;
-            }
-            let mut result = 0;
-            let mut x = region_start;
-            while x < (parent_end - region_len) {
-                // println!("x = {}", x);
-                if x % (region_len) == 0 {
-                    region_start = x;
-                    result = 1;
-                    break;
-                }
-                x += 32;
-            }
-            // No region could be found within the parent region and with
-            // region_len which suffices Cortex-M requirements. Either the
-            // parent size should be bigger/differently located, or the regopm
-            // length (and so min_app_ram_size) should be smaller
-            if result == 0 {
-                println!("No region could be found within the parent region and with region_len which suffices Cortex-M requirements.");
-                return None;
-            }
-        }
-        // Case 3: Hard
+        // Case 2: Hard
         // Things get more difficult if the start doesn't align to the length.
         // If the start still aligns to the region length / 4, we can use a
         // larger MPU region and expose only MPU subregions.
@@ -118,41 +81,15 @@ fn main() {
         // are required: 8 after the start for the region itself and one to
         // before the start to align it.
         else {
-            // if region_start % region_len != 0 && exponent >= 7
-            // Region sizes must be > 128 Bytes in order to support subregions.
-
-            // Region start always has to align to at least 128 bits. If it
-            // doesn't, move it up
-            // if region_start % 128 != 0 {
-            //     region_start += 128 - (region_start % 128);
-            // }
-
-            // Check to make sure we're still within parent after rounding up to 128
-            if region_start + region_len > parent_end {
-                return None;
-            }
-
             // If the start doesn't align to the region length / 4, this means
-            // start will have to be changed
+            // start will have to be changed to align to htis
             if region_start % (region_len / 4) != 0 {
-                // Move start so that it aligns with region_len / 4.
-                let mut x = region_start;
-                let mut result = 0;
-                while x < (parent_end - region_len) {
-                    // println!("x = {}", x);
-                    if x % (region_len / 4) == 0 {
-                        // println!("Success! Breaking");
-                        region_start = x;
-                        result = 1;
-                        break;
-                    }
-                    x += 32;
-                }
+                region_start += (region_len / 4) - (region_start % (region_len / 4));
                 // No region could be found within the parent region and with
                 // region_len which suffices Cortex-M requirements. Either the
                 // parent size should be bigger/differently located, or the
                 // region length (and so min_app_ram_size) should be smaller
-                if result == 0 {
+                if region_start + region_len > parent_end {
                     println!("No region could be found within the parent region and with region_len which suffices Cortex-M requirements.");
                     return None;
                 }
