@@ -46,7 +46,7 @@ pub fn load_processes<S: UserspaceKernelBoundary, M: MPU>(
     let mut app_memory_size = app_memory.len();
     for i in 0..procs.len() {
         unsafe {
-            let (process, flash_offset, memory_offset, memory_padding_offset) = Process::create(
+            let (process, flash_offset, memory_offset) = Process::create(
                 kernel,
                 syscall,
                 mpu,
@@ -68,11 +68,9 @@ pub fn load_processes<S: UserspaceKernelBoundary, M: MPU>(
                 procs[i] = process;
             }
 
-            let total_memory_offset = memory_offset + memory_padding_offset;
-
             apps_in_flash_ptr = apps_in_flash_ptr.offset(flash_offset as isize);
-            app_memory_ptr = app_memory_ptr.offset(total_memory_offset as isize);
-            app_memory_size -= total_memory_offset;
+            app_memory_ptr = app_memory_ptr.offset(memory_offset as isize);
+            app_memory_size -= memory_offset;
         }
     }
 }
@@ -1223,14 +1221,14 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
         remaining_app_memory: *mut u8,
         remaining_app_memory_size: usize,
         fault_response: FaultResponse,
-    ) -> (Option<&'static ProcessType>, usize, usize, usize) {
+    ) -> (Option<&'static ProcessType>, usize, usize) {
         if let Some(tbf_header) = tbfheader::parse_and_validate_tbf_header(app_flash_address) {
             let app_flash_size = tbf_header.get_total_size() as usize;
 
             // If this isn't an app (i.e. it is padding) or it is an app but it
             // isn't enabled, then we can skip it but increment past its flash.
             if !tbf_header.is_app() || !tbf_header.enabled() {
-                return (None, app_flash_size, 0, 0);
+                return (None, app_flash_size, 0);
             }
 
             // Otherwise, actually load the app.
@@ -1238,8 +1236,22 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
             let process_name = tbf_header.get_package_name(app_flash_address);
             let init_fn =
                 app_flash_address.offset(tbf_header.get_init_function_offset() as isize) as usize;
+            
+            // Initialize MPU region configuration.
+            let mut mpu_config: M::MpuConfig = Default::default();
 
-            // First determine how much space we need in the application's
+            // Allocate MPU region for flash.
+            if let None = mpu.expose_memory_region(
+                app_flash_address,
+                app_flash_size,
+                app_flash_size,
+                mpu::Permissions::ReadExecuteOnly,
+                &mut mpu_config,
+            ) {
+                panic!("{:?} failed to load. Infeasible to allocate MPU region for flash", process_name);
+            }
+
+            // Determine how much space we need in the application's
             // memory space just for kernel and grant state. We need to make
             // sure we allocate enough memory just for that.
 
@@ -1256,62 +1268,47 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
             // Make room to store this process's metadata.
             let process_struct_offset = mem::size_of::<Process<S, M>>();
 
-            let initial_grant_size = grant_ptrs_offset + callbacks_offset + process_struct_offset;
-            let initial_pam_size = 128;
+            // Initial sizes of app and kernel memory.
+            let initial_kernel_memory_size = grant_ptrs_offset + callbacks_offset + process_struct_offset;
+            let initial_app_memory_size = 128;
 
-            // Need to make sure that the amount of memory we allocate for
-            // this process at least covers this state.
-            if min_app_ram_size < initial_pam_size + initial_grant_size {
-                min_app_ram_size = initial_pam_size + initial_grant_size;
+            if min_app_ram_size < initial_app_memory_size {
+                min_app_ram_size = initial_app_memory_size;
             }
 
-            // New MPU config
-            let mut mpu_config: M::MpuConfig = Default::default();
+            // Minimum memory size for the process.
+            let min_total_memory_size = min_app_ram_size + initial_kernel_memory_size;
 
-            // Allocate MPU region for flash
-            if let None = mpu.expose_memory_region(
-                app_flash_address,
-                app_flash_size,
-                app_flash_size,
-                mpu::Permissions::ReadExecuteOnly,
-                &mut mpu_config,
-            ) {
-                panic!("Failed allocating flash MPU region");
-            }
-
-            // Allocate MPU region for PAM
+            // Determine where process memory will go and allocate MPU region for app memory.
             let (memory_start, memory_size) = match mpu.setup_process_memory_layout(
                 remaining_app_memory as *const u8,
                 remaining_app_memory_size,
-                min_app_ram_size,
-                initial_pam_size,
-                initial_grant_size,
+                min_total_memory_size,
+                initial_app_memory_size,
+                initial_kernel_memory_size,
                 mpu::Permissions::ReadWriteExecute,
                 &mut mpu_config,
             ) {
                 Some((memory_start, memory_size)) => (memory_start, memory_size),
-                None => panic!("Failed setting up process memory layout."),
+                None => { 
+                    panic!(
+                        "{:?} failed to load. Insufficient memory. Requested {} have {}",
+                        process_name,
+                        min_total_memory_size,
+                        remaining_app_memory_size
+                    );
+                },
             };
 
-            // Compute how much padding before start of process memory
+            // Compute how much padding before start of process memory.
             let memory_padding_size = (memory_start as usize) - (remaining_app_memory as usize);
 
-            // Check that we can actually give this app this much memory.
-            if memory_size + memory_padding_size > remaining_app_memory_size {
-                panic!(
-                    "{:?} failed to load. Insufficient memory. Requested {} have {}",
-                    process_name,
-                    memory_size + memory_padding_size,
-                    remaining_app_memory_size
-                );
-            }
-
-            // Set up process memory
+            // Set up process memory.
             let app_memory = slice::from_raw_parts_mut(memory_start as *mut u8, memory_size);
 
             // Set the initial process stack and memory to 128 bytes.
-            let initial_stack_pointer = memory_start.offset(initial_pam_size as isize);
-            let initial_sbrk_pointer = memory_start.offset(initial_pam_size as isize);
+            let initial_stack_pointer = memory_start.offset(initial_app_memory_size as isize);
+            let initial_sbrk_pointer = memory_start.offset(initial_app_memory_size as isize);
 
             // Set up initial grant region.
             let mut kernel_memory_break = app_memory.as_mut_ptr().offset(app_memory.len() as isize);
@@ -1415,11 +1412,10 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
             return (
                 Some(process),
                 app_flash_size,
-                memory_size,
-                memory_padding_size,
+                memory_padding_size + memory_size,
             );
         }
-        (None, 0, 0, 0)
+        (None, 0, 0)
     }
 
     fn mem_break(&self) -> *const u8 {
