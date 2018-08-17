@@ -16,7 +16,6 @@ use capsules::virtual_uart::{UartDevice, UartMux};
 use kernel::capabilities;
 use kernel::hil;
 use kernel::hil::Controller;
-use kernel::Chip;
 use kernel::Platform;
 
 #[macro_use]
@@ -243,6 +242,8 @@ pub unsafe fn reset_handler() {
 
     let mut chip = tm4c129x::chip::Tm4c129x::new();
 
+    let mpu = static_init!(cortexm4::mpu::MPU, cortexm4::mpu::MPU::new());
+
     tm4c1294.console.initialize();
 
     debug!("Initialization complete. Entering main loop...\r");
@@ -256,7 +257,7 @@ pub unsafe fn reset_handler() {
     kernel::procs::load_processes(
         board_kernel,
         &cortexm4::syscall::SysCall::new(),
-        chip.mpu(),
+        mpu,
         &_sapps as *const u8,
         &mut APP_MEMORY,
         &mut PROCESSES,

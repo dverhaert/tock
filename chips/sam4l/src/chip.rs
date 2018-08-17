@@ -22,8 +22,6 @@ use usart;
 use usbc;
 
 pub struct Sam4l {
-    //pub mpu: cortexm4::mpu::MPU,
-    pub mpu: (), //TODO
     pub systick: cortexm4::systick::SysTick,
 }
 
@@ -62,16 +60,12 @@ impl Sam4l {
         dma::DMA_CHANNELS[13].initialize(&mut adc::ADC0, dma::DMAWidth::Width16Bit);
 
         Sam4l {
-            //mpu: cortexm4::mpu::MPU::new(),
-            mpu: (),
             systick: cortexm4::systick::SysTick::new(),
         }
     }
 }
 
 impl Chip for Sam4l {
-    //type MPU = cortexm4::mpu::MPU;
-    type MPU = ();
     type SysTick = cortexm4::systick::SysTick;
 
     fn service_pending_interrupts(&mut self) {
@@ -156,10 +150,6 @@ impl Chip for Sam4l {
 
     fn has_pending_interrupts(&self) -> bool {
         unsafe { cortexm4::nvic::has_pending() || deferred_call::has_tasks() }
-    }
-
-    fn mpu(&self) -> &Self::MPU {
-        &self.mpu
     }
 
     fn systick(&self) -> &cortexm4::systick::SysTick {
