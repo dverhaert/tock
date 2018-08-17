@@ -314,11 +314,10 @@ impl kernel::mpu::MPU for MPU {
         // eights of total region lengths.
         // EX: subregions_used = (3500 * 8)/8192 + 1 = 4;
         // TODO
-        let _subregions_used = (initial_app_memory_size * 8) / region_size + 1;
+        let subregions_used = (initial_app_memory_size * 8) / region_size + 1;
 
-        // EX: 00001111 & 11111111 = 00001111 --> Use the first four subregions (0 = enable)
-        let subregion_mask = 0; //TODO
-                                //let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+        // EX: 01111111 & 11111111 = 01111111 --> Use only the first subregions (0 = enable)
+        let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
 
         //debug!("Subregions used: {}", subregions_used);
         
@@ -382,14 +381,16 @@ impl kernel::mpu::MPU for MPU {
 
         let pam_len = pam_end - region_start;
 
-        // TODO: Measure execution time of these operations. Maybe we can get some optimizations in the future.
-        let _num_subregions_used = (pam_len * 8) as u32 / region_size + 1;
+        // TODO: Measure execution time of these operations. Maybe we can implement some optimizations in the future.
+        let num_subregions_used = (pam_len * 8) as u32 / region_size + 1;
 
-        //return Ok(()); // TODO
+        // Make sure we aren't allocating subregions where we're not supposed to, i.e. at grant memory
+        let subregions_end = region_start + region_size * num_subregions_used / 8;
+        if subregions_end > grant_start {
+            return Err(());
+        }
 
-        //let subregion_mask = (0..num_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
-        //let subregion_mask = (0..8).fold(!0, |res, i| res & !(1 << i)) & 0xff;
-        let subregion_mask = 0;
+        let subregion_mask = (0..num_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
 
         let region = Region::new(
             region_start,
@@ -414,7 +415,7 @@ impl kernel::mpu::MPU for MPU {
     ) -> Option<(*const u8, usize)> {
         let region_num = config.next_region_num;
 
-        // Only 8 regions supported
+        // Cortex-M supports 8 regions 
         if region_num >= 8 {
             return None;
         }
@@ -474,9 +475,9 @@ impl kernel::mpu::MPU for MPU {
         // larger MPU region and expose only MPU subregions. Therefore, we
         // check if this is the case, and otherwise change start so that it does align to region length / 4
         // Note that if start aligns to region length / 8 but not to region length / 4,
-        // it's impossible to create a valid region since for this 9 subregions
-        // are required: 8 after the start for the region itself and one to
-        // before the start to align it.
+        // it's impossible to create a valid region since for the region itself
+        // 8 subregions are already required, so no subregions are left to 
+        // fix the alignment.
         else {
             // If the start doesn't align to the region length / 4, this means
             // start will have to be changed
@@ -505,23 +506,24 @@ impl kernel::mpu::MPU for MPU {
                 //
                 //      1 << (region_start.trailing_zeros())
                 let subregion_size = (1 as usize) << region_start.trailing_zeros();
+                let enabled_subregions_start = region_start;
+                let enabled_subregions_size = region_size;
 
-                // Once we have a subregion size, we get an underlying region size by
+                // Once we have a subregion size, we get a region size by
                 // multiplying it by the number of subregions per region.
-                let underlying_region_size = subregion_size * 8;
+                region_size = subregion_size * 8;
 
-                // Finally, we calculate the region base by finding the nearest
-                // address below `region_start` that aligns with the region size.
-                let underlying_region_start =
-                    region_start - (region_start % underlying_region_size);
+                // Finally, we calculate the new region base by finding the nearest
+                // address below `enabled_subregions_start` that aligns with the region size.
+                region_start = enabled_subregions_start - (enabled_subregions_start % region_size);
 
                 // The index of the first subregion to activate is the number of
-                // regions between `region_start` (MPU) and `start` (memory).
-                let min_subregion = (region_start - underlying_region_start) / subregion_size;
+                // regions between `enabled_subregions_start` (MPU) and `region_start` (memory).
+                let min_subregion = (enabled_subregions_start - region_start) / subregion_size;
                 // The index of the last subregion to activate is the number of
-                // regions that fit in `len`, plus the `min_subregion`, minus one
+                // regions that fit in `region_size`, plus the `min_subregion`, minus one
                 // (because subregions are zero-indexed).
-                let max_subregion = min_subregion + region_size / subregion_size - 1;
+                let max_subregion = min_subregion + enabled_subregions_size / subregion_size - 1;
                 // Turn the min/max subregion into a bitfield where all bits are `1`
                 // except for the bits whose index lie within
                 // [min_subregion, max_subregion]
@@ -531,10 +533,6 @@ impl kernel::mpu::MPU for MPU {
                 subregion_mask = Some(
                     (min_subregion..(max_subregion + 1)).fold(!0, |res, i| res & !(1 << i)) & 0xff,
                 );
-
-                // Prepare to write variables to Region
-                region_start = underlying_region_start;
-                region_size = underlying_region_size;
 
                 // debug!(
                 //     "Subregions used: {} through {}",

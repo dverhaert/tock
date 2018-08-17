@@ -576,47 +576,6 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
         // in Process for use here
         let mut config: M::MpuConfig = Default::default();
 
-        let flash_start = self.flash.as_ptr();
-        let flash_len = self.flash.len();
-
-        // Flash region
-        if let None = self.mpu.expose_memory_region(
-            flash_start,
-            flash_len,
-            flash_len,
-            mpu::Permissions::ReadExecuteOnly,
-            &mut config,
-        ) {
-            panic!("Unable to allocate flash MPU region");
-        }
-        */
-
-        /*
-        // (Obsolete) PAM region
-        let memory_start = self.memory.as_ptr();
-        let memory_len = self.memory.len();
-
-        match mpu.expose_memory_region(
-            memory_start,
-            memory_len,
-            memory_len,
-            mpu::Permissions::ReadWriteExecute,
-            &mut config,
-        ) {
-            None => panic!("Unable to allocate memory MPU region"),
-            Some(_) => (),
-        }
-        */
-
-        /*
-        if let Err(()) = self.mpu.update_process_memory_layout(
-            self.app_break.get(),
-            self.kernel_memory_break.get(),
-            &mut config,
-        ) {
-            panic!("Unable to update PAM MPU region");
-        }
-
         // IPC regions
         for region in self.mpu_regions.iter() {
             if !region.get().0.is_null() {
