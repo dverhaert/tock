@@ -8,7 +8,6 @@ use core::{mem, ptr, slice, str};
 use callback::AppId;
 use capabilities::ProcessManagementCapability;
 use common::cells::MapCell;
-use common::math;
 use common::{Queue, RingBuffer};
 use platform::mpu::{self, MPU};
 use returncode::ReturnCode;
@@ -368,17 +367,7 @@ pub struct Process<'a, S: 'static + UserspaceKernelBoundary, M: 'static + MPU> {
     mpu_config: MapCell<M::MpuConfig>,
 
     /// MPU regions are saved as a pointer-size pair.
-    ///
-    /// size is encoded as X where
-    /// SIZE = 2<sup>(X + 1)</sup> and X >= 4.
-    ///
-    /// A null pointer represents an empty region.
-    ///
-    /// #### Invariants
-    ///
-    /// The pointer must be aligned to the size. E.g. if the size is 32 bytes, the pointer must be
-    /// 32-byte aligned.
-    mpu_regions: [Cell<(*const u8, math::PowerOfTwo)>; 5],
+    mpu_regions: [Cell<(*const u8, usize)>; 5], // TODO: use associated const?
 
     /// Essentially a list of callbacks that want to call functions in the
     /// process.
@@ -570,31 +559,6 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
             panic!("Currently Tock assumes 8 regions");
         }
 
-        /*
-        // TODO: Eventually we won't do this region computation every
-        // context switch, but rather cache the resulting the MPU config data
-        // in Process for use here
-        let mut config: M::MpuConfig = Default::default();
-
-        // IPC regions
-        for region in self.mpu_regions.iter() {
-            if !region.get().0.is_null() {
-                let ipc_start = region.get().0;
-                let ipc_len = region.get().1.as_num::<u32>() as usize;
-
-                if let None = self.mpu.expose_memory_region(
-                    ipc_start,
-                    ipc_len,
-                    ipc_len,
-                    mpu::Permissions::ReadWriteExecute,
-                    &mut config,
-                ) {
-                    panic!("Unable to allocate IPC MPU region");
-                }
-            }
-        }
-        */
-
         // Configure MPU
         self.mpu_config.map(|config| {
             self.mpu.configure_mpu(&config);
@@ -603,21 +567,29 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
 
     /// Add an MPU region for IPC
     fn add_mpu_region(&self, base: *const u8, size: u32) -> bool {
-        if size >= 16 && size.count_ones() == 1 && (base as u32) % size == 0 {
-            let mpu_size = math::PowerOfTwo::floor(size);
-            for region in self.mpu_regions.iter() {
-                if region.get().0 == ptr::null() {
-                    region.set((base, mpu_size));
-                    return true;
-                } else if region.get().0 == base {
-                    if region.get().1 < mpu_size {
-                        region.set((base, mpu_size));
+        match self.mpu_config.map(|mut config| {
+            match self.mpu.expose_memory_region(
+                base, 
+                size as usize, 
+                size as usize,
+                mpu::Permissions::ReadWriteExecute,
+                &mut config,
+            ) {
+                Some((region_start, region_size)) => {
+                    for region in self.mpu_regions.iter() {
+                        if region.get().0 == ptr::null() {
+                            region.set((region_start, region_size));
+                            return true;
+                        }
                     }
-                    return true;
-                }
+                    panic!("Not enough room in process struct to store IPC region.");
+                },
+                None => false,
             }
+        }) {
+            Some(result) => result,
+            None => panic!("MPU config not found."),
         }
-        return false;
     }
 
     fn sbrk(&self, increment: isize) -> Result<*const u8, Error> {
@@ -1326,11 +1298,11 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
             process.mpu = mpu;
             process.mpu_config = MapCell::new(mpu_config);
             process.mpu_regions = [
-                Cell::new((ptr::null(), math::PowerOfTwo::zero())),
-                Cell::new((ptr::null(), math::PowerOfTwo::zero())),
-                Cell::new((ptr::null(), math::PowerOfTwo::zero())),
-                Cell::new((ptr::null(), math::PowerOfTwo::zero())),
-                Cell::new((ptr::null(), math::PowerOfTwo::zero())),
+                Cell::new((ptr::null(), 0)),
+                Cell::new((ptr::null(), 0)),
+                Cell::new((ptr::null(), 0)),
+                Cell::new((ptr::null(), 0)),
+                Cell::new((ptr::null(), 0)),
             ];
             process.tasks = MapCell::new(tasks);
             process.process_name = process_name;
