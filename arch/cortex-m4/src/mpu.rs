@@ -134,7 +134,7 @@ pub struct CortexMConfig {
     next_region_num: usize,
 }
 
-const PAM_REGION_NUM: usize = 0;
+const APP_MEMORY_REGION_NUM: usize = 0;
 
 impl Default for CortexMConfig {
     fn default() -> CortexMConfig {
@@ -330,13 +330,13 @@ impl kernel::mpu::MPU for MPU {
         let region = Region::new(
             region_start as u32,
             region_size as u32,
-            PAM_REGION_NUM as u32,
+            APP_MEMORY_REGION_NUM as u32,
             Some(subregion_mask),
             permissions,
         );
 
         config.memory_info = Some(memory_info);
-        config.regions[PAM_REGION_NUM] = region;
+        config.regions[APP_MEMORY_REGION_NUM] = region;
 
         // TODO: do this in config and set PAM region to region 0. Two reasons:
         // (1) More logical to increment the number of used regions when setting up the PAM
@@ -351,8 +351,8 @@ impl kernel::mpu::MPU for MPU {
 
     fn update_process_memory_layout(
         &self,
-        new_app_memory_break: *const u8,
-        new_kernel_memory_break: *const u8,
+        app_memory_break: *const u8,
+        kernel_memory_break: *const u8,
         config: &mut Self::MpuConfig,
     ) -> Result<(), ()> {
         let (region_start, region_size, permissions) = match config.memory_info {
@@ -371,22 +371,22 @@ impl kernel::mpu::MPU for MPU {
         //debug!("New new kernel memory break: {:#X}", new_kernel_memory_break as usize);
 
         // The PAM ends at new_app_memory_break, it's different from the region length.
-        let pam_end = new_app_memory_break as u32;
-        let grant_start = new_kernel_memory_break as u32;
+        let app_memory_break = app_memory_break as u32;
+        let kernel_memory_break = kernel_memory_break as u32;
 
-        if pam_end > grant_start {
+        if app_memory_break > kernel_memory_break {
             // Error: out of memory for the application. Please allocate more memory for your application.
             return Err(());
         }
 
-        let pam_len = pam_end - region_start;
+        let app_memory_size = app_memory_break - region_start;
 
         // TODO: Measure execution time of these operations. Maybe we can implement some optimizations in the future.
-        let num_subregions_used = (pam_len * 8) as u32 / region_size + 1;
+        let num_subregions_used = (app_memory_size * 8) / region_size + 1;
 
-        // Make sure we aren't allocating subregions where we're not supposed to, i.e. at grant memory
+        // Make sure we aren't allocating subregions where we're not supposed to, i.e. in kernel memory
         let subregions_end = region_start + region_size * num_subregions_used / 8;
-        if subregions_end > grant_start {
+        if subregions_end > kernel_memory_break {
             return Err(());
         }
 
@@ -395,12 +395,12 @@ impl kernel::mpu::MPU for MPU {
         let region = Region::new(
             region_start,
             region_size,
-            PAM_REGION_NUM as u32,
+            APP_MEMORY_REGION_NUM as u32,
             Some(subregion_mask),
             permissions,
         );
 
-        config.regions[PAM_REGION_NUM] = region;
+        config.regions[APP_MEMORY_REGION_NUM] = region;
 
         Ok(())
     }
