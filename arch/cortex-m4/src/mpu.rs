@@ -297,15 +297,29 @@ impl kernel::mpu::MPU for MPU {
         // eights of total region lengths.
         //
         // EX: subregions_used = (3500 * 8)/8192 + 1 = 4;
-        let subregions_used = (initial_app_memory_size * 8) / region_size + 1;
+        let mut subregions_used = (initial_app_memory_size * 8) / region_size + 1;
 
-        // EX: 01111111 & 11111111 = 01111111 --> Use only the first subregions (0 = enable)
-        let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+        let kernel_memory_break = region_start + region_size - initial_kernel_memory_size;
+        let subregion_size = region_size / 8;
+        let subregions_end = region_start + subregions_used * subregion_size; 
+
+        // The last subregion for app memory overlaps the start of kernel memory. We can fix this by
+        // doubling the region size.
+        if subregions_end > kernel_memory_break {
+            region_size *= 2;
+            if region_start % region_size != 0 {
+                region_start += region_size - (region_start % region_size);
+            }
+            subregions_used = (initial_app_memory_size * 8) / region_size + 1;
+        }
 
         // Make sure the region fits in the parent memory block
         if region_start + region_size > (parent_start as usize) + parent_size {
             return None;
         }
+
+        // EX: 01111111 & 11111111 = 01111111 --> Use only the first subregions (0 = enable)
+        let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
         
         let memory_info = ProcessMemoryInfo {
             memory_start: region_start as *const u8,
