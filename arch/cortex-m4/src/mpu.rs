@@ -159,7 +159,7 @@ impl Default for CortexMConfig {
 pub struct ProcessMemoryInfo {
     memory_start: *const u8,
     memory_size: usize,
-    pam_permissions: Permissions,
+    permissions: Permissions,
 }
 
 #[derive(Copy, Clone)]
@@ -261,7 +261,7 @@ impl kernel::mpu::MPU for MPU {
         permissions: Permissions,
         config: &mut Self::MpuConfig,
     ) -> Option<(*const u8, usize)> {
-        // Make sure there is enough memory for PAM and grant // TODO: include grant in min_app?
+        // Make sure there is enough memory for app memory and kernel memory 
         let memory_size = {
             if min_memory_size < initial_app_memory_size + initial_kernel_memory_size {
                 initial_app_memory_size + initial_kernel_memory_size
@@ -270,14 +270,8 @@ impl kernel::mpu::MPU for MPU {
             }
         };
 
-        // Some statements for debugging. Will be removed on PR.
-        //debug!("Min app ram size: {}", min_app_ram_size);
-        //debug!("Initial PAM size: {}", initial_pam_size);
-        //debug!("Initial grant size: {}", initial_grant_size);
-        //debug!("App ram size: {}", app_ram_size);
+        // We'll use a running example for the purposes of clarity. // TODO
 
-        // We'll go through this code with some numeric examples, and
-        // indicate this by EX.
         let mut region_size = math::closest_power_of_two(memory_size as u32) as usize;
         let exponent = math::log_base_two(region_size as u32);
         
@@ -289,42 +283,34 @@ impl kernel::mpu::MPU for MPU {
             return None;
         }
 
-        // Preferably, the region will start at the start of the parent region
+        // Ideally, the region will start at the start of the parent memory block 
         let mut region_start = parent_start as usize;
 
-        // If the start doesn't align to the length, move region start up until it does
+        // If the start and length don't align, move region up until it does
         if region_start % region_size != 0 {
             region_start += region_size - (region_start % region_size);
         }
 
-        // Make sure that the requested region fits in memory
-        let parent_end = parent_start as usize + parent_size;
-        if region_start + region_size > parent_end {
-            //debug!("Requested region doesn't fit in memory");
-            return None;
-        }
-
-        //debug!("Parent start: {:#X}", parent_start as usize);
-        //debug!("Region start: {:#X}", region_start);
-        //debug!("Region len: {}", region_size);
-
-        // The memory initially allocated for the PAM will be aligned to an eigth of the total region length.
-        // This allows Cortex-M subregions to control the growth of the PAM/grant in a more linear way.
+        // The memory initially allocated for app memory will be aligned to an eigth of the total region length.
+        // This allows Cortex-M subregions to cover incrementally growing app memory in linear way.
         // The Cortex-M has a total of 8 subregions per region, which is why we can have precision in
         // eights of total region lengths.
+        //
         // EX: subregions_used = (3500 * 8)/8192 + 1 = 4;
-        // TODO
         let subregions_used = (initial_app_memory_size * 8) / region_size + 1;
 
         // EX: 01111111 & 11111111 = 01111111 --> Use only the first subregions (0 = enable)
         let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
 
-        //debug!("Subregions used: {}", subregions_used);
+        // Make sure the region fits in the parent memory block
+        if region_start + region_size > (parent_start as usize) + parent_size {
+            return None;
+        }
         
         let memory_info = ProcessMemoryInfo {
             memory_start: region_start as *const u8,
             memory_size: region_size,
-            pam_permissions: permissions,
+            permissions: permissions,
         };
 
         let region = Region::new(
@@ -337,14 +323,6 @@ impl kernel::mpu::MPU for MPU {
 
         config.memory_info = Some(memory_info);
         config.regions[APP_MEMORY_REGION_NUM] = region;
-
-        // TODO: do this in config and set PAM region to region 0. Two reasons:
-        // (1) More logical to increment the number of used regions when setting up the PAM
-        // (2) On future addition of overlapping regions (e.g. it becomes necessary to add a small grant region), this region will have higher priority because the Cortex-M orders region priorities by their index
-        // let region_num = config.num_regions_used;
-        // debug!("regions used: {}", region_num);
-        // config.regions[region_num] = region;
-        // config.num_regions_used += 1;
 
         Some((region_start as *const u8, region_size))
     }
@@ -359,23 +337,18 @@ impl kernel::mpu::MPU for MPU {
             Some(memory_info) => (
                 memory_info.memory_start as u32,
                 memory_info.memory_size as u32,
-                memory_info.pam_permissions,
+                memory_info.permissions,
             ),
             None => panic!(
-                "Error: update_process_memory_layout called before setup_prcoess_memory_layout"
+                "Error: Process tried to update app memory MPU region before it was created."
             ),
         };
 
-        //debug!("First update:");
-        //debug!("New app memory break: {:#X}", new_app_memory_break as usize);
-        //debug!("New new kernel memory break: {:#X}", new_kernel_memory_break as usize);
-
-        // The PAM ends at new_app_memory_break, it's different from the region length.
         let app_memory_break = app_memory_break as u32;
         let kernel_memory_break = kernel_memory_break as u32;
 
+        // Out of memory
         if app_memory_break > kernel_memory_break {
-            // Error: out of memory for the application. Please allocate more memory for your application.
             return Err(());
         }
 
@@ -384,8 +357,9 @@ impl kernel::mpu::MPU for MPU {
         // TODO: Measure execution time of these operations. Maybe we can implement some optimizations in the future.
         let num_subregions_used = (app_memory_size * 8) / region_size + 1;
 
-        // Make sure we aren't allocating subregions where we're not supposed to, i.e. in kernel memory
-        let subregions_end = region_start + region_size * num_subregions_used / 8;
+        // We can no longer cover app memory with an MPU region without overlapping kernel memory 
+        let subregion_size = region_size / 8;
+        let subregions_end = region_start + subregion_size * num_subregions_used;
         if subregions_end > kernel_memory_break {
             return Err(());
         }
