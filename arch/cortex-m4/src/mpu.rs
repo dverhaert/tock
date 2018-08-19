@@ -409,8 +409,13 @@ impl kernel::mpu::MPU for MPU {
             return None;
         }
         
+        // Logical region 
         let mut start = parent_start as usize;
         let mut size = min_region_size;
+        
+        // Physical MPU region
+        let mut region_start = start;
+        let mut region_size = size;
         let mut subregion_mask = None;
         
         // Region start always has to align to 32 bytes 
@@ -483,8 +488,8 @@ impl kernel::mpu::MPU for MPU {
                 let mask =
                     (min_subregion..(max_subregion + 1)).fold(!0, |res, i| res & !(1 << i)) & 0xff;
 
-                start = underlying_region_start;
-                size = underlying_region_size;
+                region_start = underlying_region_start;
+                region_size = underlying_region_size;
                 subregion_mask = Some(mask);
             } else {
                 // In this case, we can't use subregions to solve the alignment
@@ -492,6 +497,9 @@ impl kernel::mpu::MPU for MPU {
                 // shift `start` up in memory to make it align with `size`.
                 size = math::closest_power_of_two(size as u32) as usize;
                 start += size - (start % size); 
+
+                region_start = start;
+                region_size = size;
             }
         }
 
@@ -506,8 +514,8 @@ impl kernel::mpu::MPU for MPU {
         }
 
         let region = Region::new(
-            start as u32,
-            size as u32,
+            region_start as u32,
+            region_size as u32,
             region_num as u32,
             subregion_mask,
             permissions,
