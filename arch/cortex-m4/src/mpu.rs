@@ -440,12 +440,15 @@ impl kernel::mpu::MPU for MPU {
             //      1 << (start.trailing_zeros())
             let subregion_size = {
                 let tz = start.trailing_zeros();
-                // We know that `start` is not 0, since otherwise `size` would 
-                // divide `start`, but in case it is, do the right thing anyway.
                 if tz < 32 {
                     (1 as usize) << tz
                 } else {
-                    0
+                    // This case means `start` is 0.
+                    let mut ceil = math::closest_power_of_two(size as u32) as usize;
+                    if ceil < 256 {
+                        ceil = 256
+                    }
+                    ceil / 8
                 }
             };
 
