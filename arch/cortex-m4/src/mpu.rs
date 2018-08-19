@@ -469,7 +469,7 @@ impl kernel::mpu::MPU for MPU {
             // To use subregions, the region must be at least 256 bytes. Also, we need
             // the amount of left over space in the region after `start` to be at least as 
             // large as the memory region we want to cover.
-            if subregion_size >= 32 && underlying_region_end > end {
+            if subregion_size >= 32 && underlying_region_end >= end {
                 // The index of the first subregion to activate is the number of
                 // regions between `region_start` (MPU) and `start` (memory).
                 let min_subregion = (start - underlying_region_start) / subregion_size;
