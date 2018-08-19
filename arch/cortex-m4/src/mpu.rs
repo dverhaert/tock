@@ -462,7 +462,7 @@ impl kernel::mpu::MPU for MPU {
                 
             // If `size` doesn't align to the subregion size, extend it.
             if size % subregion_size != 0 {
-                size += size - (size % start);
+                size += subregion_size - (size % subregion_size);
             }
 
             let end = start + size;
