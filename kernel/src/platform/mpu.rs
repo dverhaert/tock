@@ -132,7 +132,7 @@ pub trait MPU {
     /// Returns the region exposed by the MPU region. If it is infeasible to allocate 
     /// the MPU region, returns None.
     #[allow(unused_variables)]
-    fn expose_memory_region(
+    fn allocate_region(
         &self,
         parent_start: *const u8,
         parent_size: usize,

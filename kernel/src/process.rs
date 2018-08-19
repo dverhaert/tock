@@ -568,7 +568,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
     /// Add an MPU region for IPC
     fn add_mpu_region(&self, base: *const u8, size: u32) -> bool {
         match self.mpu_config.map(|mut config| {
-            match self.mpu.expose_memory_region(
+            match self.mpu.allocate_region(
                 base, 
                 size as usize, 
                 size as usize,
@@ -1172,7 +1172,7 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
             let mut mpu_config: M::MpuConfig = Default::default();
 
             // Allocate MPU region for flash.
-            if let None = mpu.expose_memory_region(
+            if let None = mpu.allocate_region(
                 app_flash_address,
                 app_flash_size,
                 app_flash_size,

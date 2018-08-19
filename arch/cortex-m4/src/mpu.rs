@@ -393,8 +393,7 @@ impl kernel::mpu::MPU for MPU {
         Ok(())
     }
 
-    // TODO: rename allocate_region?
-    fn expose_memory_region(
+    fn allocate_region(
         &self,
         parent_start: *const u8,
         parent_size: usize,
