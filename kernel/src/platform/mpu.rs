@@ -1,6 +1,6 @@
 //! Interface for configuring the Memory Protection Unit.
 
-/// User mode permission levels for accesses to a memory region.
+/// User mode access permissions.
 #[derive(Copy, Clone)]
 pub enum Permissions {
     ReadWriteExecute,
@@ -9,6 +9,7 @@ pub enum Permissions {
     ReadOnly,
     ExecuteOnly,
 }
+
 
 pub trait MPU {
     type MpuConfig: Default = ();
@@ -21,13 +22,47 @@ pub trait MPU {
 
     /// Returns the total number of regions supported by the MPU.
     fn number_total_regions(&self) -> usize {
-        8
+        0 
+    }
+    
+    /// Allocates a new MPU region.
+    ///
+    /// The implementor must create an MPU region at least `min_region_size` bytes
+    /// in size within the specified parent region, with the specified user mode 
+    /// permissions, and store it within `config`.
+    ///
+    /// # Arguments
+    ///
+    /// `parent_start`      : start of the parent region
+    /// `parent_size`       : size of the parent region
+    /// `min_region_size`   : minimum size of the region
+    /// `permissions`       : permissions for the MPU region
+    /// `config`            : MPU region configuration
+    ///
+    /// # Return Value
+    ///
+    /// Returns the start and size of the MPU region. If it is infeasible to allocate 
+    /// the MPU region, returns None.
+    #[allow(unused_variables)]
+    fn allocate_region(
+        &self,
+        parent_start: *const u8,
+        parent_size: usize,
+        min_region_size: usize,
+        permissions: Permissions,
+        config: &mut Self::MpuConfig,
+    ) -> Option<(*const u8, usize)> {
+        if min_region_size > parent_size {
+            None
+        } else {
+            Some((parent_start, min_region_size))
+        }
     }
 
     /// Chooses the location for a process's memory, and allocates an MPU region
     /// covering the app-owned portion.
     ///
-    /// An implementation must allocate a contiguous block of memory that is at
+    /// An implementation must choose a contiguous block of memory that is at
     /// least `min_memory_size` bytes in size and lies completely within the
     /// specified parent region. 
     ///
@@ -37,13 +72,12 @@ pub trait MPU {
     ///     beginning of the memory block.
     /// 2.  The region does not intersect with the last `initial_kernel_memory_size`
     ///     bytes.
-    /// 3.  The region has the permissions specified by `permissions`.
+    /// 3.  The region has the user mode permissions specified by `permissions`.
     ///
-    /// The end of app memory will likely increase in the future, so the implementation 
-    /// should choose the location of the process memory block such that it is possible 
-    /// for the MPU region covering app memory to grow along with it.
-    /// The implementation must store state for the allocated region in the `config` 
-    /// variable.
+    /// The end address of app memory will increase in the future, so the 
+    /// implementation should choose the location of the process memory block such that 
+    /// it is possible for the MPU region to grow along with it. The implementation must 
+    /// store state for the allocated region in `config`.
     ///
     /// # Arguments
     ///
@@ -58,8 +92,9 @@ pub trait MPU {
     /// # Return Value
     ///
     /// This function returns the start address and the size of the memory block
-    /// allocated for the process. If it is infeasible to allocate the block or 
-    /// the MPU region, or if the function has already been called, returns None.
+    /// chosen for the process. If it is infeasible to find a memory block or 
+    /// allocate the MPU region, or if the function has already been called, returns 
+    /// None.
     #[allow(unused_variables)]
     fn allocate_app_memory_region(
         &self,
@@ -85,11 +120,10 @@ pub trait MPU {
         }
     }
 
-    /// Updates the MPU region for app memory to reflect any changes in the
-    /// position of the app memory break and/or kernel memory break.
+    /// Updates the MPU region for app memory.
     ///
     /// The implementor must reallocate the app memory MPU region stored in `config` 
-    /// to maintain the 3 conditions described in `setup_process_memory_layout`.
+    /// to maintain the 3 conditions described in `allocate_app_memory_region`.
     ///
     /// # Arguments
     ///
@@ -112,40 +146,6 @@ pub trait MPU {
             Err(())
         } else {
             Ok(())
-        }
-    }
-
-    /// Allocates a new MPU region.
-    ///
-    /// The implementor must create an MPU region at least `min_region_size`
-    /// in size within the specified parent region, with the specified permissions,
-    /// and store it within `config`.
-    ///
-    /// # Arguments
-    ///
-    /// `parent_start`      : start of the parent region
-    /// `parent_size`       : size of the parent region
-    /// `min_region_size`   : minimum size of the region
-    /// `permissions`       : permissions for the MPU region
-    /// `config`            : MPU region configuration
-    ///
-    /// # Return Value
-    ///
-    /// Returns the region exposed by the MPU region. If it is infeasible to allocate 
-    /// the MPU region, returns None.
-    #[allow(unused_variables)]
-    fn allocate_region(
-        &self,
-        parent_start: *const u8,
-        parent_size: usize,
-        min_region_size: usize,
-        permissions: Permissions,
-        config: &mut Self::MpuConfig,
-    ) -> Option<(*const u8, usize)> {
-        if min_region_size > parent_size {
-            None
-        } else {
-            Some((parent_start, min_region_size))
         }
     }
 

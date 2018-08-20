@@ -367,7 +367,7 @@ pub struct Process<'a, S: 'static + UserspaceKernelBoundary, M: 'static + MPU> {
     mpu_config: MapCell<M::MpuConfig>,
 
     /// MPU regions are saved as a pointer-size pair.
-    mpu_regions: [Cell<(*const u8, usize)>; 5], // TODO: use associated const?
+    mpu_regions: [Cell<(*const u8, usize)>; 5],
 
     /// Essentially a list of callbacks that want to call functions in the
     /// process.
@@ -555,10 +555,6 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
     }
 
     fn setup_mpu(&self) {
-        if self.mpu.number_total_regions() != 8 {
-            panic!("Currently Tock assumes 8 regions");
-        }
-
         // Configure MPU
         self.mpu_config.map(|config| {
             self.mpu.configure_mpu(&config);
