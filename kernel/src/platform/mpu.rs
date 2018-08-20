@@ -114,7 +114,7 @@ pub trait MPU {
         }
     }
 
-    /// Adds a new MPU region exposing a memory region to the process.
+    /// Allocates a new MPU region.
     ///
     /// The implementor must create an MPU region at least `min_region_size`
     /// in size within the specified parent region, with the specified permissions,
