@@ -150,7 +150,7 @@ impl Default for CortexMConfig {
                 Region::empty(6),
                 Region::empty(7),
             ],
-            next_region_num: 1,   // Region 0 is reserved for app memory 
+            next_region_num: 1, // Region 0 is reserved for app memory
         }
     }
 }
@@ -250,7 +250,7 @@ impl kernel::mpu::MPU for MPU {
         let regs = &*self.0;
         regs.mpu_type.read(Type::DREGION) as usize
     }
-    
+
     fn allocate_region(
         &self,
         parent_start: *const u8,
@@ -261,21 +261,21 @@ impl kernel::mpu::MPU for MPU {
     ) -> Option<(*const u8, usize)> {
         let region_num = config.next_region_num;
 
-        // Cortex-M only supports 8 regions 
+        // Cortex-M only supports 8 regions
         if region_num >= 8 {
             return None;
         }
-        
-        // Logical region 
+
+        // Logical region
         let mut start = parent_start as usize;
         let mut size = min_region_size;
-        
+
         // Physical MPU region
         let mut region_start = start;
         let mut region_size = size;
         let mut subregion_mask = None;
-        
-        // Region start always has to align to 32 bytes 
+
+        // Region start always has to align to 32 bytes
         if start % 32 != 0 {
             start += 32 - (start % 32);
         }
@@ -285,8 +285,8 @@ impl kernel::mpu::MPU for MPU {
             size = 32;
         }
 
-        // We can only create an MPU region if the size is a power of two and it divides 
-        // the start address. If this is not the case, the first thing we try to do to 
+        // We can only create an MPU region if the size is a power of two and it divides
+        // the start address. If this is not the case, the first thing we try to do to
         // cover the memory region is to use a larger MPU region and expose certain subregions.
         if size.count_ones() > 1 || start % size != 0 {
             // Which (power-of-two) subregion size would align with the base
@@ -317,7 +317,7 @@ impl kernel::mpu::MPU for MPU {
             // Finally, we calculate the region base by finding the nearest
             // address below `start` that aligns with the region size.
             let underlying_region_start = start - (start % underlying_region_size);
-                
+
             // If `size` doesn't align to the subregion size, extend it.
             if size % subregion_size != 0 {
                 size += subregion_size - (size % subregion_size);
@@ -327,7 +327,7 @@ impl kernel::mpu::MPU for MPU {
             let underlying_region_end = underlying_region_start + underlying_region_size;
 
             // To use subregions, the region must be at least 256 bytes. Also, we need
-            // the amount of left over space in the region after `start` to be at least as 
+            // the amount of left over space in the region after `start` to be at least as
             // large as the memory region we want to cover.
             if subregion_size >= 32 && underlying_region_end >= end {
                 // The index of the first subregion to activate is the number of
@@ -356,14 +356,14 @@ impl kernel::mpu::MPU for MPU {
                 // problem. Instead, we will round up `size` to a power of two and
                 // shift `start` up in memory to make it align with `size`.
                 size = math::closest_power_of_two(size as u32) as usize;
-                start += size - (start % size); 
+                start += size - (start % size);
 
                 region_start = start;
                 region_size = size;
             }
         }
 
-        // Regions can't be greater than 4 GB. 
+        // Regions can't be greater than 4 GB.
         if math::log_base_two(size as u32) >= 32 {
             return None;
         }
@@ -397,7 +397,7 @@ impl kernel::mpu::MPU for MPU {
         permissions: Permissions,
         config: &mut Self::MpuConfig,
     ) -> Option<(*const u8, usize)> {
-        // Make sure there is enough memory for app memory and kernel memory 
+        // Make sure there is enough memory for app memory and kernel memory
         let memory_size = {
             if min_memory_size < initial_app_memory_size + initial_kernel_memory_size {
                 initial_app_memory_size + initial_kernel_memory_size
@@ -410,7 +410,7 @@ impl kernel::mpu::MPU for MPU {
 
         let mut region_size = math::closest_power_of_two(memory_size as u32) as usize;
         let exponent = math::log_base_two(region_size as u32);
-        
+
         if exponent < 8 {
             // Region sizes must be 256 Bytes or larger in order to support subregions
             region_size = 256;
@@ -419,7 +419,7 @@ impl kernel::mpu::MPU for MPU {
             return None;
         }
 
-        // Ideally, the region will start at the start of the parent memory block 
+        // Ideally, the region will start at the start of the parent memory block
         let mut region_start = parent_start as usize;
 
         // If the start and length don't align, move region up until it does
@@ -437,7 +437,7 @@ impl kernel::mpu::MPU for MPU {
 
         let kernel_memory_break = region_start + region_size - initial_kernel_memory_size;
         let subregion_size = region_size / 8;
-        let subregions_end = region_start + subregions_used * subregion_size; 
+        let subregions_end = region_start + subregions_used * subregion_size;
 
         // The last subregion for app memory overlaps the start of kernel memory. We can fix this by
         // doubling the region size.
@@ -456,7 +456,7 @@ impl kernel::mpu::MPU for MPU {
 
         // EX: 01111111 & 11111111 = 01111111 --> Use only the first subregions (0 = enable)
         let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
-        
+
         let memory_info = ProcessMemoryInfo {
             memory_start: region_start as *const u8,
             memory_size: region_size,
@@ -507,7 +507,7 @@ impl kernel::mpu::MPU for MPU {
         // TODO: Measure execution time of these operations. Maybe we can implement some optimizations in the future.
         let num_subregions_used = (app_memory_size * 8) / region_size + 1;
 
-        // We can no longer cover app memory with an MPU region without overlapping kernel memory 
+        // We can no longer cover app memory with an MPU region without overlapping kernel memory
         let subregion_size = region_size / 8;
         let subregions_end = region_start + subregion_size * num_subregions_used;
         if subregions_end > kernel_memory_break {
@@ -528,7 +528,6 @@ impl kernel::mpu::MPU for MPU {
 
         Ok(())
     }
-
 
     fn configure_mpu(&self, config: &Self::MpuConfig) {
         let regs = &*self.0;

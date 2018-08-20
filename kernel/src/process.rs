@@ -565,8 +565,8 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
     fn add_mpu_region(&self, base: *const u8, size: u32) -> bool {
         match self.mpu_config.map(|mut config| {
             match self.mpu.allocate_region(
-                base, 
-                size as usize, 
+                base,
+                size as usize,
                 size as usize,
                 mpu::Permissions::ReadWriteExecute,
                 &mut config,
@@ -579,7 +579,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
                         }
                     }
                     panic!("Not enough room in process struct to store IPC region.");
-                },
+                }
                 None => false,
             }
         }) {
@@ -1163,7 +1163,7 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
             let process_name = tbf_header.get_package_name(app_flash_address);
             let init_fn =
                 app_flash_address.offset(tbf_header.get_init_function_offset() as isize) as usize;
-            
+
             // Initialize MPU region configuration.
             let mut mpu_config: M::MpuConfig = Default::default();
 
@@ -1175,7 +1175,10 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
                 mpu::Permissions::ReadExecuteOnly,
                 &mut mpu_config,
             ) {
-                panic!("{:?} failed to load. Infeasible to allocate MPU region for flash", process_name);
+                panic!(
+                    "{:?} failed to load. Infeasible to allocate MPU region for flash",
+                    process_name
+                );
             }
 
             // Determine how much space we need in the application's
@@ -1196,7 +1199,8 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
             let process_struct_offset = mem::size_of::<Process<S, M>>();
 
             // Initial sizes of app and kernel memory.
-            let initial_kernel_memory_size = grant_ptrs_offset + callbacks_offset + process_struct_offset;
+            let initial_kernel_memory_size =
+                grant_ptrs_offset + callbacks_offset + process_struct_offset;
             let initial_app_memory_size = 128;
 
             if min_app_ram_size < initial_app_memory_size {
@@ -1217,14 +1221,12 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
                 &mut mpu_config,
             ) {
                 Some((memory_start, memory_size)) => (memory_start, memory_size),
-                None => { 
+                None => {
                     panic!(
                         "{:?} failed to load. Insufficient memory. Requested {} have {}",
-                        process_name,
-                        min_total_memory_size,
-                        remaining_app_memory_size
+                        process_name, min_total_memory_size, remaining_app_memory_size
                     );
-                },
+                }
             };
 
             // Compute how much padding before start of process memory.

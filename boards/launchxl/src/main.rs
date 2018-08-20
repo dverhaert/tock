@@ -274,7 +274,7 @@ pub unsafe fn reset_handler() {
     };
 
     let mut chip = cc26x2::chip::Cc26X2::new();
-    
+
     let mpu = static_init!(cortexm4::mpu::MPU, cortexm4::mpu::MPU::new());
 
     extern "C" {
