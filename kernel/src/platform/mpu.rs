@@ -38,8 +38,9 @@ pub trait MPU {
     ///     bytes.
     /// 3.  The region has the permissions specified by `permissions`.
     ///
-    /// This MPU region may need to grow in the future, and so the implementation should
-    /// choose the location of the memory block such that this is possible. 
+    /// The end of app memory will likely increase in the future, so the implementation 
+    /// should choose the location of the process memory block such that it is possible 
+    /// for the MPU region covering app memory to grow along with it.
     /// The implementation must store state for the allocated region in the `config` 
     /// variable.
     ///
