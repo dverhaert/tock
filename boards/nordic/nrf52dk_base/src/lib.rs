@@ -437,6 +437,7 @@ pub unsafe fn setup_board(
     board_kernel.kernel_loop(
         &platform,
         &mut chip,
+        mpu,
         Some(&platform.ipc),
         &main_loop_capability,
     );

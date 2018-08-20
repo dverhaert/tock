@@ -13,6 +13,7 @@ use ipc;
 use mem::AppSlice;
 use memop;
 use platform::systick::SysTick;
+use platform::mpu::MPU;
 use platform::{Chip, Platform};
 use process::{self, Task};
 use returncode::ReturnCode;
@@ -163,10 +164,11 @@ impl Kernel {
     }
 
     /// Main loop.
-    pub fn kernel_loop<P: Platform, C: Chip>(
+    pub fn kernel_loop<P: Platform, C: Chip, M: MPU>(
         &'static self,
         platform: &P,
         chip: &mut C,
+        mpu: &'static M,
         ipc: Option<&ipc::IPC>,
         _capability: &capabilities::MainLoopCapability,
     ) {
@@ -179,6 +181,7 @@ impl Kernel {
                         self.do_process(
                             platform,
                             chip,
+                            mpu,
                             process,
                             callback::AppId::new(self, i),
                             ipc,
@@ -198,10 +201,11 @@ impl Kernel {
         }
     }
 
-    unsafe fn do_process<P: Platform, C: Chip>(
+    unsafe fn do_process<P: Platform, C: Chip, M: MPU>(
         &self,
         platform: &P,
         chip: &mut C,
+        mpu: &'static M,
         process: &process::ProcessType,
         appid: AppId,
         ipc: Option<&::ipc::IPC>,
@@ -225,11 +229,11 @@ impl Kernel {
                     // so go ahead and set things up and switch to executing
                     // the process.
                     process.setup_mpu();
-                    process.enable_mpu();
+                    mpu.enable_mpu();
                     systick.enable(true);
                     let context_switch_reason = process.switch_to();
                     systick.enable(false);
-                    process.disable_mpu();
+                    mpu.disable_mpu();
 
                     // Now the process has returned back to the kernel. Check
                     // why and handle the process as appropriate.

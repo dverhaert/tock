@@ -402,5 +402,5 @@ pub unsafe fn reset_handler() {
         &process_mgmt_cap,
     );
 
-    board_kernel.kernel_loop(&imix, &mut chip, Some(&imix.ipc), &main_cap);
+    board_kernel.kernel_loop(&imix, &mut chip, mpu, Some(&imix.ipc), &main_cap);
 }

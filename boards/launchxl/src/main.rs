@@ -295,5 +295,5 @@ pub unsafe fn reset_handler() {
         &process_management_capability,
     );
 
-    board_kernel.kernel_loop(&launchxl, &mut chip, Some(&ipc), &main_loop_capability);
+    board_kernel.kernel_loop(&launchxl, &mut chip, mpu, Some(&ipc), &main_loop_capability);
 }

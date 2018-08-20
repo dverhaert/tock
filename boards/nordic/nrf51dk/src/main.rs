@@ -413,6 +413,7 @@ pub unsafe fn reset_handler() {
     board_kernel.kernel_loop(
         &platform,
         &mut chip,
+        mpu,
         Some(&kernel::ipc::IPC::new(
             board_kernel,
             &memory_allocation_capability,

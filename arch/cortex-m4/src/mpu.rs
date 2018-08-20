@@ -455,7 +455,8 @@ impl kernel::mpu::MPU for MPU {
         }
 
         // EX: 01111111 & 11111111 = 01111111 --> Use only the first subregions (0 = enable)
-        let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+        //let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+        let subregion_mask = 0;
 
         let memory_info = ProcessMemoryInfo {
             memory_start: region_start as *const u8,
@@ -514,7 +515,8 @@ impl kernel::mpu::MPU for MPU {
             return Err(());
         }
 
-        let subregion_mask = (0..num_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+        //let subregion_mask = (0..num_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+        let subregion_mask = 0;
 
         let region = Region::new(
             region_start,

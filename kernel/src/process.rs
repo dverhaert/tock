@@ -164,13 +164,11 @@ pub trait ProcessType {
 
     // mpu
 
-    fn enable_mpu(&self);
-
-    fn disable_mpu(&self);
-
+    /// Configure the MPU to use the process's allocated regions.
     fn setup_mpu(&self);
 
-    fn add_mpu_region(&self, base: *const u8, size: u32) -> bool;
+    /// Allocate a new region for the process.
+    fn add_mpu_region(&self, start: *const u8, size: usize) -> bool;
 
     // grants
 
@@ -546,28 +544,18 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
         }
     }
 
-    fn enable_mpu(&self) {
-        self.mpu.enable_mpu();
-    }
-
-    fn disable_mpu(&self) {
-        self.mpu.disable_mpu();
-    }
-
     fn setup_mpu(&self) {
-        // Configure MPU
         self.mpu_config.map(|config| {
             self.mpu.configure_mpu(&config);
         });
     }
 
-    /// Add an MPU region for IPC
-    fn add_mpu_region(&self, base: *const u8, size: u32) -> bool {
+    fn add_mpu_region(&self, start: *const u8, size: usize) -> bool {
         match self.mpu_config.map(|mut config| {
             match self.mpu.allocate_region(
-                base,
-                size as usize,
-                size as usize,
+                start,
+                size,
+                size,
                 mpu::Permissions::ReadWriteExecute,
                 &mut config,
             ) {

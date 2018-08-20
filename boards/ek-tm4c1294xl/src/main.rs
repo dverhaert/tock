@@ -267,6 +267,7 @@ pub unsafe fn reset_handler() {
     board_kernel.kernel_loop(
         &tm4c1294,
         &mut chip,
+        mpu,
         Some(&tm4c1294.ipc),
         &main_loop_capability,
     );
