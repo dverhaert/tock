@@ -10,7 +10,6 @@ pub enum Permissions {
     ExecuteOnly,
 }
 
-
 pub trait MPU {
     type MpuConfig: Default = ();
 
