@@ -251,7 +251,7 @@ impl kernel::mpu::MPU for MPU {
         regs.mpu_type.read(Type::DREGION) as usize
     }
 
-    fn setup_process_memory_layout(
+    fn allocate_app_memory_region(
         &self,
         parent_start: *const u8,
         parent_size: usize,
@@ -341,7 +341,7 @@ impl kernel::mpu::MPU for MPU {
         Some((region_start as *const u8, region_size))
     }
 
-    fn update_process_memory_layout(
+    fn update_app_memory_region(
         &self,
         app_memory_break: *const u8,
         kernel_memory_break: *const u8,

@@ -1,5 +1,6 @@
 //! Interface for configuring the Memory Protection Unit.
 
+/// User mode permission levels for accesses to a memory region.
 #[derive(Copy, Clone)]
 pub enum Permissions {
     ReadWriteExecute,
@@ -60,7 +61,7 @@ pub trait MPU {
     /// allocated for the process. If it is infeasible to allocate the block or 
     /// the MPU region, or if the function has already been called, returns None.
     #[allow(unused_variables)]
-    fn setup_process_memory_layout(
+    fn allocate_app_memory_region(
         &self,
         parent_start: *const u8,
         parent_size: usize,
@@ -101,7 +102,7 @@ pub trait MPU {
     /// Returns an error if it is infeasible to update the MPU region, or if it was
     /// never created.
     #[allow(unused_variables)]
-    fn update_process_memory_layout(
+    fn update_app_memory_region(
         &self,
         app_memory_break: *const u8,
         kernel_memory_break: *const u8,

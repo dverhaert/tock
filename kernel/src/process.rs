@@ -605,7 +605,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
             // TODO: remove
             } else if new_break > self.kernel_memory_break.get() {
                 Err(Error::OutOfMemory)
-            } else if let Err(_) = self.mpu.update_process_memory_layout(
+            } else if let Err(_) = self.mpu.update_app_memory_region(
                 new_break,
                 self.kernel_memory_break.get(),
                 &mut config,
@@ -644,7 +644,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
                 None
             } else if let Err(_) =
                 self.mpu
-                    .update_process_memory_layout(self.app_break.get(), new_break, &mut config)
+                    .update_app_memory_region(self.app_break.get(), new_break, &mut config)
             {
                 None
             } else {
@@ -1211,7 +1211,7 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
             let min_total_memory_size = min_app_ram_size + initial_kernel_memory_size;
 
             // Determine where process memory will go and allocate MPU region for app memory.
-            let (memory_start, memory_size) = match mpu.setup_process_memory_layout(
+            let (memory_start, memory_size) = match mpu.allocate_app_memory_region(
                 remaining_app_memory as *const u8,
                 remaining_app_memory_size,
                 min_total_memory_size,
