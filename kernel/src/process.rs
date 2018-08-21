@@ -169,7 +169,12 @@ pub trait ProcessType {
 
     /// Allocate a new MPU region for the process that is at least `min_region_size`
     /// bytes and lies within the specified parent memory block.
-    fn add_mpu_region(&self, parent_start: *const u8, parent_size: usize, min_region_size: usize) -> Option<(*const u8, usize)>;
+    fn add_mpu_region(
+        &self,
+        parent_start: *const u8,
+        parent_size: usize,
+        min_region_size: usize,
+    ) -> Option<(*const u8, usize)>;
 
     // grants
 
@@ -551,7 +556,12 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
         });
     }
 
-    fn add_mpu_region(&self, parent_start: *const u8, parent_size: usize, min_region_size: usize) -> Option<(*const u8, usize)> {
+    fn add_mpu_region(
+        &self,
+        parent_start: *const u8,
+        parent_size: usize,
+        min_region_size: usize,
+    ) -> Option<(*const u8, usize)> {
         match self.mpu_config.map(|mut config| {
             match self.mpu.allocate_region(
                 parent_start,
@@ -568,7 +578,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
                         }
                     }
                     panic!("Not enough room in process struct to store MPU region.");
-                },
+                }
                 None => None,
             }
         }) {

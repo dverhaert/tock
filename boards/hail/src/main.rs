@@ -578,5 +578,11 @@ pub unsafe fn reset_handler() {
         FAULT_RESPONSE,
         &process_management_capability,
     );
-    board_kernel.kernel_loop(&hail, &mut chip, mpu, Some(&hail.ipc), &main_loop_capability);
+    board_kernel.kernel_loop(
+        &hail,
+        &mut chip,
+        mpu,
+        Some(&hail.ipc),
+        &main_loop_capability,
+    );
 }
