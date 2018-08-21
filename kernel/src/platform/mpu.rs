@@ -26,7 +26,7 @@ pub trait MPU {
 
     /// Allocates a new MPU region.
     ///
-    /// The implementor must create an MPU region at least `min_region_size` bytes
+    /// An implementation must create an MPU region at least `min_region_size` bytes
     /// in size within the specified parent region, with the specified user mode
     /// permissions, and store it within `config`.
     ///
@@ -121,7 +121,7 @@ pub trait MPU {
 
     /// Updates the MPU region for app memory.
     ///
-    /// The implementor must reallocate the app memory MPU region stored in `config`
+    /// An implementation must reallocate the app memory MPU region stored in `config`
     /// to maintain the 3 conditions described in `allocate_app_memory_region`.
     ///
     /// # Arguments
