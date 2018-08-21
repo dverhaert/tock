@@ -108,11 +108,12 @@ pub trait ProcessType {
 
     // memop operations
 
-    /// Change the location of the program break.
+    /// Change the location of the program break and reallocate the MPU region
+    /// covering program memory.
     fn brk(&self, new_break: *const u8) -> Result<*const u8, Error>;
 
-    /// Change the location of the program break and return the previous break
-    /// address.
+    /// Change the location of the program break, reallocate the MPU region
+    /// covering program memory, and return the previous break address.
     fn sbrk(&self, increment: isize) -> Result<*const u8, Error>;
 
     /// The start address of allocated RAM for this process.
@@ -178,7 +179,8 @@ pub trait ProcessType {
 
     // grants
 
-    /// Create new memory in the grant region.
+    /// Create new memory in the grant region, and check that the MPU region
+    /// covering program memory does not extend past the kernel memory break.
     unsafe fn alloc(&self, size: usize) -> Option<&mut [u8]>;
 
     unsafe fn free(&self, _: *mut u8);
@@ -577,7 +579,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
                             return Some((region_start, region_size));
                         }
                     }
-                    panic!("Not enough room in process struct to store MPU region.");
+                    panic!("Not enough room in Process struct to store MPU region.");
                 }
                 None => None,
             }
