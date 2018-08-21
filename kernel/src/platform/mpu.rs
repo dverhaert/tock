@@ -151,7 +151,7 @@ pub trait MPU {
     /// Configures the MPU with the provided region configuration.
     ///
     /// An implementation must ensure that all memory locations not covered by
-    /// an allocated region are inaccessible in user mode and accessible in 
+    /// an allocated region are inaccessible in user mode and accessible in
     /// supervisor mode.
     ///
     /// # Arguments
