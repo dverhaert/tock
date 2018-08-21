@@ -593,11 +593,9 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
     }
 
     fn brk(&self, new_break: *const u8) -> Result<*const u8, Error> {
-        //debug!("Brk called, with request {:#X}", new_break as usize);
         match self.mpu_config.map(|mut config| {
             if new_break < self.mem_start() || new_break >= self.mem_end() {
                 Err(Error::AddressOutOfBounds)
-            // TODO: remove
             } else if new_break > self.kernel_memory_break.get() {
                 Err(Error::OutOfMemory)
             } else if let Err(_) = self.mpu.update_app_memory_region(
@@ -634,7 +632,6 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
     unsafe fn alloc(&self, size: usize) -> Option<&mut [u8]> {
         match self.mpu_config.map(|mut config| {
             let new_break = self.kernel_memory_break.get().offset(-(size as isize));
-            // TODO: remove
             if new_break < self.app_break.get() {
                 None
             } else if let Err(_) =
