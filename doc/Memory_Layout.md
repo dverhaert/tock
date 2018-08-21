@@ -111,4 +111,4 @@ others. The structure of its flash and RAM is as follows.
 
 The following image gives an example of how things are currently laid out in practice. It shows the address space of both flash and RAM with three running applications: crc, ip_sense and analog_comparator.
 
-![Process memory layout](process_memory_layout.pdf)
+![Process memory layout](process_memory_layout.png)
