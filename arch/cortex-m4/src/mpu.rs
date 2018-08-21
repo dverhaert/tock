@@ -406,8 +406,6 @@ impl kernel::mpu::MPU for MPU {
             }
         };
 
-        // We'll use a running example for the purposes of clarity. // TODO
-
         let mut region_size = math::closest_power_of_two(memory_size as u32) as usize;
         let exponent = math::log_base_two(region_size as u32);
 
@@ -505,7 +503,6 @@ impl kernel::mpu::MPU for MPU {
 
         let app_memory_size = app_memory_break - region_start;
 
-        // TODO: Measure execution time of these operations. Maybe we can implement some optimizations in the future.
         let num_subregions_used = (app_memory_size * 8) / region_size + 1;
 
         // We can no longer cover app memory with an MPU region without overlapping kernel memory
