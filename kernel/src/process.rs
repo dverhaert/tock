@@ -167,8 +167,9 @@ pub trait ProcessType {
     /// Configure the MPU to use the process's allocated regions.
     fn setup_mpu(&self);
 
-    /// Allocate a new region for the process.
-    fn add_mpu_region(&self, start: *const u8, size: usize) -> bool;
+    /// Allocate a new MPU region for the process that is at least `min_region_size`
+    /// bytes and lies within the specified parent memory block.
+    fn add_mpu_region(&self, parent_start: *const u8, parent_size: usize, min_region_size: usize) -> Option<(*const u8, usize)>;
 
     // grants
 
@@ -550,12 +551,12 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
         });
     }
 
-    fn add_mpu_region(&self, start: *const u8, size: usize) -> bool {
+    fn add_mpu_region(&self, parent_start: *const u8, parent_size: usize, min_region_size: usize) -> Option<(*const u8, usize)> {
         match self.mpu_config.map(|mut config| {
             match self.mpu.allocate_region(
-                start,
-                size,
-                size,
+                parent_start,
+                parent_size,
+                min_region_size,
                 mpu::Permissions::ReadWriteExecute,
                 &mut config,
             ) {
@@ -563,15 +564,15 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
                     for region in self.mpu_regions.iter() {
                         if region.get().0 == ptr::null() {
                             region.set((region_start, region_size));
-                            return true;
+                            return Some((region_start, region_size));
                         }
                     }
-                    panic!("Not enough room in process struct to store IPC region.");
-                }
-                None => false,
+                    panic!("Not enough room in process struct to store MPU region.");
+                },
+                None => None,
             }
         }) {
-            Some(result) => result,
+            Some(option) => option,
             None => panic!("MPU config not found."),
         }
     }
