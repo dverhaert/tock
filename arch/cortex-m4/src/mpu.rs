@@ -453,7 +453,7 @@ impl kernel::mpu::MPU for MPU {
             return None;
         }
 
-        // For example: 01111111 & 11111111 = 01111111 --> Use only the first subregions (0 = enable)
+        // For example: 11111111 & 11111110 = 11111110 --> Use only the first subregion (0 = enable)
         let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
 
         let memory_info = ProcessMemoryInfo {
