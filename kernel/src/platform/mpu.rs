@@ -27,7 +27,7 @@ pub trait MPU {
     /// Allocates a new MPU region.
     ///
     /// An implementation must create an MPU region at least `min_region_size` bytes
-    /// in size, within the specified parent region, with the specified user mode
+    /// in size within the specified parent region, with the specified user mode
     /// permissions, and store it within `config`.
     ///
     /// # Arguments
@@ -73,8 +73,8 @@ pub trait MPU {
     ///     bytes.
     /// 3.  The region has the user mode permissions specified by `permissions`.
     ///
-    /// The end address of app memory will increase in the future, so the
-    /// implementation should choose the location of the app memory block such that
+    /// The end address of app-owned memory will increase in the future, so the
+    /// implementation should choose the location of the process memory block such that
     /// it is possible for the MPU region to grow along with it. The implementation must
     /// store state for the allocated region in `config`.
     ///
