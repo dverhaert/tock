@@ -513,7 +513,7 @@ impl kernel::mpu::MPU for MPU {
         }
 
         let subregion_mask = (0..num_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
-        
+
         let region = Region::new(
             region_start,
             region_size,
