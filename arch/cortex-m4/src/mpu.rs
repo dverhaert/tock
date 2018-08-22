@@ -406,6 +406,7 @@ impl kernel::mpu::MPU for MPU {
             }
         };
 
+        // Size must be a power of two, so: https://www.youtube.com/watch?v=ovo6zwv6DX4
         let mut region_size = math::closest_power_of_two(memory_size as u32) as usize;
         let exponent = math::log_base_two(region_size as u32);
 
@@ -430,15 +431,15 @@ impl kernel::mpu::MPU for MPU {
         // The Cortex-M has a total of 8 subregions per region, which is why we can have precision in
         // eights of total region lengths.
         //
-        // EX: subregions_used = (3500 * 8)/8192 + 1 = 4;
+        // For example: subregions_used = (3500 * 8)/8192 + 1 = 4;
         let mut subregions_used = (initial_app_memory_size * 8) / region_size + 1;
 
         let kernel_memory_break = region_start + region_size - initial_kernel_memory_size;
         let subregion_size = region_size / 8;
         let subregions_end = region_start + subregions_used * subregion_size;
 
-        // The last subregion for app memory overlaps the start of kernel memory. We can fix this by
-        // doubling the region size.
+        // If the last subregion for app memory overlaps the start of kernel
+        // memory, we can fix this by doubling the region size.
         if subregions_end > kernel_memory_break {
             region_size *= 2;
             if region_start % region_size != 0 {
@@ -452,9 +453,8 @@ impl kernel::mpu::MPU for MPU {
             return None;
         }
 
-        // EX: 01111111 & 11111111 = 01111111 --> Use only the first subregions (0 = enable)
-        //let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
-        let subregion_mask = 0;
+        // For example: 01111111 & 11111111 = 01111111 --> Use only the first subregions (0 = enable)
+        let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
 
         let memory_info = ProcessMemoryInfo {
             memory_start: region_start as *const u8,
@@ -512,9 +512,8 @@ impl kernel::mpu::MPU for MPU {
             return Err(());
         }
 
-        //let subregion_mask = (0..num_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
-        let subregion_mask = 0;
-
+        let subregion_mask = (0..num_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
+        
         let region = Region::new(
             region_start,
             region_size,
