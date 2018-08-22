@@ -373,7 +373,7 @@ pub struct Process<'a, S: 'static + UserspaceKernelBoundary, M: 'static + MPU> {
     mpu_config: MapCell<M::MpuConfig>,
 
     /// MPU regions are saved as a pointer-size pair.
-    mpu_regions: [Cell<(*const u8, usize)>; 5],
+    mpu_regions: [Cell<(*const u8, usize)>; 6],
 
     /// Essentially a list of callbacks that want to call functions in the
     /// process.
@@ -1294,6 +1294,7 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
             process.mpu = mpu;
             process.mpu_config = MapCell::new(mpu_config);
             process.mpu_regions = [
+                Cell::new((ptr::null(), 0)),
                 Cell::new((ptr::null(), 0)),
                 Cell::new((ptr::null(), 0)),
                 Cell::new((ptr::null(), 0)),
