@@ -348,9 +348,10 @@ impl kernel::mpu::MPU for MPU {
             let subregion_size = {
                 let tz = start.trailing_zeros();
                 if tz < 32 {
+                    // Find the largest power of two that divides `start`
                     (1 as usize) << tz
                 } else {
-                    // This case means `start` is 0.
+                    // This case means `start` is 0, and `size` is not a power of two.
                     let mut ceil = math::closest_power_of_two(size as u32) as usize;
                     if ceil < 256 {
                         ceil = 256
@@ -402,7 +403,7 @@ impl kernel::mpu::MPU for MPU {
                 subregion_mask = Some(mask);
             } else {
                 // In this case, we can't use subregions to solve the alignment
-                // problem. Instead, we will round up `size` to a power of two and
+                // problem. Instead, we round up `size` to a power of two and
                 // shift `start` up in memory to make it align with `size`.
                 size = math::closest_power_of_two(size as u32) as usize;
                 start += size - (start % size);
@@ -482,29 +483,55 @@ impl kernel::mpu::MPU for MPU {
         if region_start % region_size != 0 {
             region_start += region_size - (region_start % region_size);
         }
+        
+        let subregion_size = region_size / 8;
 
         // The memory initially allocated for app memory will be aligned to an eigth of the total region length.
         // This allows Cortex-M subregions to cover incrementally growing app memory in linear way.
         // The Cortex-M has a total of 8 subregions per region, which is why we can have precision in
         // eights of total region lengths.
-        //
-        // For example: subregions_used = (3500 * 8)/8192 + 1 = 4;
-        let mut subregions_used = (initial_app_memory_size * 8) / region_size + 1;
+        // --------------
+        // // Option 1: don't give processes access to unallocated data by using
+        // // the app_memory_size to determine the amount of subregions used.
+        // // For example: subregions_used = (3500 * 8)/8192 + 1 = 4;
+        // let mut subregions_used = (initial_app_memory_size * 8) / region_size + 1;
+        // let kernel_memory_break = region_start + region_size - initial_kernel_memory_size;
 
-        let kernel_memory_break = region_start + region_size - initial_kernel_memory_size;
-        let subregion_size = region_size / 8;
+        // // Calculates the end address of the enabled subregions.
+        // let subregions_end = region_start + subregions_used * subregion_size;
+
+        // // If the end of app memory and the start of kernel memory are in the
+        // // same subregion, we make the entire region twice as big such that 
+        // // they both have plenty of space to grow into.
+        // if subregions_end > kernel_memory_break {
+        //     if app_memory_break > subregions_end 
+        //     region_size *= 2;
+        //     if region_start % region_size != 0 {
+        //         region_start += region_size - (region_start % region_size);
+        //     }
+        //     subregions_used = (initial_app_memory_size * 8) / region_size + 1;
+        // }
+        // --------------
+        // Option 2: give processes access to unallocated data by using
+        // the kernel_memory_size to determine the amount of subregions used.
+        // For example: 8 - (1500*8/8192) - 1 = 6
+        let mut subregions_used = 8 - (initial_kernel_memory_size * 8)/region_size - 1;
+        let app_memory_break = region_start + initial_app_memory_size;
+
+        // Calculates the end address of the enabled subregions.
         let subregions_end = region_start + subregions_used * subregion_size;
 
-        // If the last subregion for app memory overlaps the start of kernel
-        // memory, we can fix this by doubling the region size.
-        if subregions_end > kernel_memory_break {
+        // If the end of app memory and the end of app memory are in the
+        // same subregion, we make the entire region twice as big such that 
+        // they both have plenty of space to grow into.
+        if app_memory_break > subregions_end {
             region_size *= 2;
             if region_start % region_size != 0 {
                 region_start += region_size - (region_start % region_size);
             }
-            subregions_used = (initial_app_memory_size * 8) / region_size + 1;
+            subregions_used = 8 - (initial_kernel_memory_size * 8)/region_size - 1;
         }
-
+        // --------------
         // Make sure the region fits in the unallocated memory.
         if region_start + region_size
             > (unallocated_memory_start as usize) + unallocated_memory_size
