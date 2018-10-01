@@ -78,11 +78,6 @@ fn allocate_memory_region(
     let mut start = parent_start as usize;
     let mut size = min_region_size;
     
-    // Physical MPU region
-    let mut region_start = start;
-    let mut region_size = size;
-    let mut subregion_mask = None;
-
     // Regions must be at least 32 bytes
     if size < 32 {
         size = 32;
@@ -109,6 +104,11 @@ fn allocate_memory_region(
         // For example: start = 320 --> subregion_size = 64
         subregion_size = (1 as usize) << start.trailing_zeros();
     }
+    
+    // Physical MPU region
+    let mut region_start = start;
+    let mut region_size = size;
+    let mut subregion_mask = None;
 
     // Rounds start up to region_size/8, region_size/4, region_size/2 and
     // region_size, thereby checking all possibilities for subregions.
@@ -169,9 +169,6 @@ fn allocate_memory_region(
                 "Subregions used: {} through {}",
                 min_subregion, max_subregion
             );
-            println!("Underlying region start address: {}", underlying_region_start);
-            println!("Underlying region size: {}", underlying_region_size); 
-            
             break;
         }
         // We just tried aligning a certain start and size. Apparently, it
@@ -183,8 +180,10 @@ fn allocate_memory_region(
     }
 
     println!("Region start: {}", start);
-    println!("Region size: {}\n", size);  
-
+    println!("Region size: {}", size);
+    println!("Underlying region start address: {}", region_start);
+    println!("Underlying region size: {}\n", region_size);
+            
     // Regions can't be greater than 4 GB. 
     if f32::log2(size as f32) >= 32 as f32 {
         return None;
