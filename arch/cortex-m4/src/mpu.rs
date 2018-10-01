@@ -273,6 +273,14 @@ impl CortexMRegion {
     }
 }
 
+fn round_up_to_nearest_multiple(x: usize, y: usize) -> usize {
+    if x % y == 0 {
+        x
+    } else {
+        x + y - (x % y)
+    }
+}
+
 impl kernel::mpu::MPU for MPU {
     type MpuConfig = CortexMConfig;
 
@@ -319,14 +327,31 @@ impl kernel::mpu::MPU for MPU {
         let mut start = unallocated_memory_start as usize;
         let mut size = min_region_size;
 
-        // Region start always has to align to 32 bytes
-        if start % 32 != 0 {
-            start += 32 - (start % 32);
-        }
-
         // Regions must be at least 32 bytes
         if size < 32 {
             size = 32;
+        }
+
+        // The minimum possible subregion size given a certain min_region_size
+        // is closest_power_of_two(min_region_size)/8.
+        let mut size_pow_two = math::closest_power_of_two(size as u32) as usize;
+        if size_pow_two < 256 {
+            size_pow_two = 256
+        }
+        let mut subregion_size = size_pow_two / 8;
+
+        // Rounds start up to subregion_size, which is always higher than 32.
+        start = round_up_to_nearest_multiple(start, subregion_size);
+
+        // We would normally start from checking size_pow_two/8. However, if the
+        // start divides a higher power of two, we can skip some iterations by
+        // using this number as the subregion size instead.
+        if start != 0 {
+            // Which (power-of-two) subregion size would align with the base
+            // address? We find this by taking smallest binary substring of the base
+            // address with exactly one bit.
+            // For example: start = 320 --> subregion_size = 64
+            subregion_size = (1 as usize) << start.trailing_zeros();
         }
 
         // Physical MPU region (might be larger than logical region if some subregions are disabled)
@@ -334,30 +359,17 @@ impl kernel::mpu::MPU for MPU {
         let mut region_size = size;
         let mut subregion_mask = None;
 
-        // We can only create an MPU region if the size is a power of two and it divides
-        // the start address. If this is not the case, the first thing we try to do to
-        // cover the memory region is to use a larger MPU region and expose certain subregions.
-        if size.count_ones() > 1 || start % size != 0 {
-            // Which (power-of-two) subregion size would align with the base
-            // address?
-            //
-            // We find this by taking smallest binary substring of the base
-            // address with exactly one bit:
-            //
-            //      1 << (start.trailing_zeros())
-            let subregion_size = {
-                let tz = start.trailing_zeros();
-                if tz < 32 {
-                    (1 as usize) << tz
-                } else {
-                    // This case means `start` is 0.
-                    let mut ceil = math::closest_power_of_two(size as u32) as usize;
-                    if ceil < 256 {
-                        ceil = 256
-                    }
-                    ceil / 8
-                }
-            };
+        // Rounds start up to region_size/8, region_size/4, region_size/2 and
+        // region_size, thereby checking all possibilities for subregions.
+        // If none of these cases works, it is impossible to create a region,
+        // and we fail.
+        while subregion_size <= size_pow_two {
+            // If the size is a power of two and start % size = 0, we have a valid
+            // region. If this is not the case, we try to cover the memory
+            // region by using a larger MPU region and expose certain subregions.
+            if size.count_ones() == 1 && start % size == 0 {
+                break;
+            }
 
             // Once we have a subregion size, we get a region size by
             // multiplying it by the number of subregions per region.
@@ -368,23 +380,21 @@ impl kernel::mpu::MPU for MPU {
             let underlying_region_start = start - (start % underlying_region_size);
 
             // If `size` doesn't align to the subregion size, extend it.
-            if size % subregion_size != 0 {
-                size += subregion_size - (size % subregion_size);
-            }
+            size = round_up_to_nearest_multiple(size, subregion_size);
 
             let end = start + size;
             let underlying_region_end = underlying_region_start + underlying_region_size;
 
-            // To use subregions, the region must be at least 256 bytes. Also, we need
-            // the amount of left over space in the region after `start` to be at least as
-            // large as the memory region we want to cover.
-            if subregion_size >= 32 && underlying_region_end >= end {
+            // We have found a suitable subregion setup if the end of the
+            // underlying region covers the end of our memory. If so, we set this up
+            // and break. Otherwise, we repeat this while loop.
+            if underlying_region_end >= end {
                 // The index of the first subregion to activate is the number of
                 // regions between `region_start` (MPU) and `start` (memory).
                 let min_subregion = (start - underlying_region_start) / subregion_size;
 
                 // The index of the last subregion to activate is the number of
-                // regions that fit in `len`, plus the `min_subregion`, minus one
+                // regions that fit in `size`, plus the `min_subregion`, minus one
                 // (because subregions are zero-indexed).
                 let max_subregion = min_subregion + size / subregion_size - 1;
 
@@ -400,16 +410,13 @@ impl kernel::mpu::MPU for MPU {
                 region_start = underlying_region_start;
                 region_size = underlying_region_size;
                 subregion_mask = Some(mask);
-            } else {
-                // In this case, we can't use subregions to solve the alignment
-                // problem. Instead, we will round up `size` to a power of two and
-                // shift `start` up in memory to make it align with `size`.
-                size = math::closest_power_of_two(size as u32) as usize;
-                start += size - (start % size);
 
-                region_start = start;
-                region_size = size;
+                break;
             }
+            // We just tried aligning a certain start and size. Apparently, it
+            // didn't work out, so we try aligning for a bigger region instead.
+            subregion_size *= 2;
+            start = round_up_to_nearest_multiple(start, subregion_size);
         }
 
         // Cortex-M regions can't be greater than 4 GB.
@@ -479,9 +486,7 @@ impl kernel::mpu::MPU for MPU {
         let mut region_start = unallocated_memory_start as usize;
 
         // If the start and length don't align, move region up until it does
-        if region_start % region_size != 0 {
-            region_start += region_size - (region_start % region_size);
-        }
+        region_start = round_up_to_nearest_multiple(region_start, region_size);
 
         // The memory initially allocated for app memory will be aligned to an eigth of the total region length.
         // This allows Cortex-M subregions to cover incrementally growing app memory in linear way.
@@ -499,9 +504,7 @@ impl kernel::mpu::MPU for MPU {
         // memory, we can fix this by doubling the region size.
         if subregions_end > kernel_memory_break {
             region_size *= 2;
-            if region_start % region_size != 0 {
-                region_start += region_size - (region_start % region_size);
-            }
+            region_start = round_up_to_nearest_multiple(region_start, region_size);
             subregions_used = (initial_app_memory_size * 8) / region_size + 1;
         }
 
