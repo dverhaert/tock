@@ -364,6 +364,9 @@ impl kernel::mpu::MPU for MPU {
         // If none of these cases works, it is impossible to create a region,
         // and we fail.
         while subregion_size <= size_pow_two {
+            // If `size` doesn't align to the subregion size, extend it.
+            size = round_up_to_nearest_multiple(size, subregion_size);
+
             // If the size is a power of two and start % size = 0, we have a valid
             // region. If this is not the case, we try to cover the memory
             // region by using a larger MPU region and expose certain subregions.
@@ -378,9 +381,6 @@ impl kernel::mpu::MPU for MPU {
             // Finally, we calculate the region base by finding the nearest
             // address below `start` that aligns with the region size.
             let underlying_region_start = start - (start % underlying_region_size);
-
-            // If `size` doesn't align to the subregion size, extend it.
-            size = round_up_to_nearest_multiple(size, subregion_size);
 
             let end = start + size;
             let underlying_region_end = underlying_region_start + underlying_region_size;
