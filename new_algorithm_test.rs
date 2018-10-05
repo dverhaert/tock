@@ -40,6 +40,7 @@ fn main() {
     test(1234,5678,2345); // 1536 to 4096 --> Existing fails
     test(10000,20000,15000); // 12288 to 28672 --> Existing fails
     test(6143,10000,4096); // Using trailing zeroes makes this converge faster
+    test(4095,10000,4096); // Using trailing zeroes makes this converge faster
 }
 
 
@@ -115,7 +116,9 @@ fn allocate_memory_region(
     // If none of these cases works, it is impossible to create a region,
     // and we fail.
     while subregion_size <= size_pow_two {
-        println!("subregion_size = {}", subregion_size);
+        
+        // If `size` doesn't align to the subregion size, extend it.
+        size = round_up_to_nearest_multiple(size as u32,subregion_size as u32) as usize;
 
         // If the size is a power of two and start % size = 0, we have a valid
         // region. If this is not the case, we try to cover the memory 
@@ -124,6 +127,7 @@ fn allocate_memory_region(
             break;
         }
 
+        println!("subregion_size = {}", subregion_size);
         // Once we have a subregion size, we get a region size by
         // multiplying it by the number of subregions per region.
         let underlying_region_size = subregion_size * 8;
@@ -131,9 +135,6 @@ fn allocate_memory_region(
         // Finally, we calculate the region base by finding the nearest
         // address below `start` that aligns with the region size.
         let underlying_region_start = start - (start % underlying_region_size);
-        
-        // If `size` doesn't align to the subregion size, extend it.
-        size = round_up_to_nearest_multiple(size as u32,subregion_size as u32) as usize;
         
         let end = start + size;
         let underlying_region_end = underlying_region_start + underlying_region_size;
