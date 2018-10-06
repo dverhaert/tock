@@ -39,8 +39,16 @@ fn main() {
     test(1,4096,1024); // 256 to 1280 --> Existing uses 1024 to 2048
     test(1234,5678,2345); // 1536 to 4096 --> Existing fails
     test(10000,20000,15000); // 12288 to 28672 --> Existing fails
-    test(6143,10000,4096); // Using trailing zeroes makes this converge faster
-    test(4095,10000,4096); // Using trailing zeroes makes this converge faster
+    test(6143,10000,4096);
+    test(4095,10000,4096); 
+    test(4096,10000,33); 
+    test(4096,1000,10000); 
+    test(64, 4096, 4096);
+    test(64, 4096, 33);
+    test(64, 64, 4096);
+    test(64, 4096, 64);
+    test(4096, 4096, 64);
+    test(4096, 64, 64);    
 }
 
 
@@ -94,18 +102,7 @@ fn allocate_memory_region(
 
     // Rounds start up to subregion_size, which is always higher than 32.
     start = round_up_to_nearest_multiple(start as u32, subregion_size as u32) as usize;
-
-    // We would normally start from checking size_pow_two/8. However, if the
-    // start divides a higher power of two, we can skip some iterations by 
-    // using this number as the subregion size instead.
-    if start != 0 {
-        // Which (power-of-two) subregion size would align with the base
-        // address? We find this by taking smallest binary substring of the base
-        // address with exactly one bit.
-        // For example: start = 320 --> subregion_size = 64
-        subregion_size = (1 as usize) << start.trailing_zeros();
-    }
-    
+  
     // Physical MPU region
     let mut region_start = start;
     let mut region_size = size;
@@ -118,12 +115,14 @@ fn allocate_memory_region(
     while subregion_size <= size_pow_two {
         
         // If `size` doesn't align to the subregion size, extend it.
-        size = round_up_to_nearest_multiple(size as u32,subregion_size as u32) as usize;
+        size = round_up_to_nearest_multiple(size as u32, subregion_size as u32) as usize;
 
         // If the size is a power of two and start % size = 0, we have a valid
         // region. If this is not the case, we try to cover the memory 
         // region by using a larger MPU region and expose certain subregions.
         if size.count_ones() == 1 && start % size == 0 {
+            region_start = start;
+            region_size = size;
             break;
         }
 
@@ -178,6 +177,10 @@ fn allocate_memory_region(
         
         // Rounds start up to next subregion_size we want to try.
         start = round_up_to_nearest_multiple(start as u32, subregion_size as u32) as usize;
+    }
+    
+    if subregion_size > size_pow_two {
+        return None;
     }
 
     println!("Region start: {}", start);
