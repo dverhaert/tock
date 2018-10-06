@@ -343,18 +343,6 @@ impl kernel::mpu::MPU for MPU {
         // Rounds start up to subregion_size (which is always higher than 32).
         start = round_up_to_nearest_multiple(start, subregion_size);
 
-        // We would normally start from checking if we can make subregions
-        // work for the minimum possible subregion size.
-        // However, if the start divides a higher power of two, we can skip
-        // some iterations by using this number as the subregion size instead.
-        if start != 0 {
-            // Which (power-of-two) subregion size would align with the base
-            // address? We find this by taking smallest binary substring of the base
-            // address with exactly one bit.
-            // For example: start = 320 --> subregion_size = 64
-            subregion_size = (1 as usize) << start.trailing_zeros();
-        }
-
         // These values form the physical MPU region: the values we write to
         // the registers. The physical MPU region might be larger than
         // the logical region if some subregions are disabled.
@@ -363,8 +351,8 @@ impl kernel::mpu::MPU for MPU {
         let mut subregion_mask = None;
 
         // This loop checks if we can make subregions work for the subregion size
-        // being equal to underlying_region_size/8, underlying_region_size/4,
-        // underlying_region_size/2 and finally underlying_region_size.
+        // being equal to size_pow_two/8, size_pow_two/4, size_pow_two/2 and
+        // finally size_pow_two.
         // If none of these cases works, it is impossible to create a region,
         // and we fail.
         while subregion_size <= size_pow_two {
@@ -425,6 +413,10 @@ impl kernel::mpu::MPU for MPU {
             start = round_up_to_nearest_multiple(start, subregion_size);
         }
 
+        // Check if we found a suitable region
+        if subregion_size > size_pow_two {
+            return None;
+        }
 
         // Cortex-M regions can't be greater than 4 GB.
         if math::log_base_two(region_size as u32) >= 32 {
