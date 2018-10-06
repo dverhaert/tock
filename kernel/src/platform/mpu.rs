@@ -1,36 +1,76 @@
 //! Interface for configuring the Memory Protection Unit.
 
-/// User mode access permissions.
+/// Access permissions.
 #[derive(Copy, Clone)]
-pub enum Permissions {
-    ReadWriteExecute,
-    ReadWriteOnly,
-    ReadExecuteOnly,
-    ReadOnly,
-    ExecuteOnly,
+pub enum Permission {
+    //                 Supervisor  User
+    //                 Access      Access
+    NoAccess,       // --          --
+    SupervisorOnly, // V           --
+    Full,           // V           V
+}
+/// MPU region type.
+#[derive(Copy, Clone)]
+pub enum RegionType {
+    // Absolute region, anchored to start and end
+    Absolute {
+        start: usize,
+        end: usize,
+        start_flexibility: usize,
+        end_flexibility: usize,
+    },
+
+    /// Relative region, flexible in alignment but having a minimum size
+    Relative {
+        lower_bound: usize,
+        upper_bound: usize,
+        min_offset: usize,
+        min_region_size: usize,
+    },
 }
 
 /// MPU region.
 #[derive(Copy, Clone)]
 pub struct Region {
-    start_address: *const u8,
-    size: usize,
+    region_type: RegionType,
+    read: Permission,
+    write: Permission,
+    execute: Permission,
 }
 
 impl Region {
-    pub fn new(start_address: *const u8, size: usize) -> Region {
+    pub fn new(
+        region_type: RegionType,
+        read: Permission,
+        write: Permission,
+        execute: Permission,
+    ) -> Region {
         Region {
-            start_address: start_address,
-            size: size,
+            region_type: region_type,
+            read: read,
+            write: write,
+            execute: execute,
         }
     }
 
-    pub fn start_address(&self) -> *const u8 {
-        self.start_address
+    pub fn get_type(&self) -> RegionType {
+        self.region_type
     }
 
-    pub fn size(&self) -> usize {
-        self.size
+    pub fn get_read_permission(&self) -> Permission {
+        self.read
+    }
+
+    pub fn get_write_permission(&self) -> Permission {
+        self.write
+    }
+
+    pub fn get_execute_permission(&self) -> Permission {
+        self.execute
+    }
+
+    pub fn set_type(&mut self, region_type: RegionType) {
+        self.region_type = region_type;
     }
 }
 
@@ -48,133 +88,17 @@ pub trait MPU {
         0
     }
 
-    /// Allocates a new MPU region.
-    ///
-    /// An implementation must allocate an MPU region at least `min_region_size` bytes
-    /// in size within the specified stretch of unallocated memory, and with the specified
-    /// user mode permissions, and store it in `config`. The allocated region may not
-    /// overlap any of the regions already stored in `config`.
+    /// Allocates a set of logical regions in the MPU.
     ///
     /// # Arguments
     ///
-    /// `unallocated_memory_start`  : start of unallocated memory
-    /// `unallocated_memory_size`   : size of unallocated memory
-    /// `min_region_size`           : minimum size of the region
-    /// `permissions`               : permissions for the region
-    /// `config`                    : MPU region configuration
+    /// `regions`: an array of disjoint logical regions.
     ///
     /// # Return Value
     ///
-    /// Returns the start and size of the allocated MPU region. If it is infeasible to
-    /// allocate the MPU region, returns None.
-    #[allow(unused_variables)]
-    fn allocate_region(
-        &self,
-        unallocated_memory_start: *const u8,
-        unallocated_memory_size: usize,
-        min_region_size: usize,
-        permissions: Permissions,
-        config: &mut Self::MpuConfig,
-    ) -> Option<Region> {
-        if min_region_size > unallocated_memory_size {
-            None
-        } else {
-            Some(Region::new(unallocated_memory_start, min_region_size))
-        }
-    }
-
-    /// Chooses the location for a process's memory, and allocates an MPU region
-    /// covering the app-owned part.
-    ///
-    /// An implementation must choose a contiguous block of memory that is at
-    /// least `min_memory_size` bytes in size and lies completely within the
-    /// specified stretch of unallocated memory.
-    ///
-    /// It must also allocate an MPU region with the following properties:
-    ///
-    /// 1.  The region covers at least the first `initial_app_memory_size` bytes at the
-    ///     beginning of the memory block.
-    /// 2.  The region does not overlap the last `initial_kernel_memory_size`
-    ///     bytes.
-    /// 3.  The region has the user mode permissions specified by `permissions`.
-    ///
-    /// The end address of app-owned memory will increase in the future, so the
-    /// implementation should choose the location of the process memory block such that
-    /// it is possible for the MPU region to grow along with it. The implementation must
-    /// store the allocated region in `config`. The allocated region may not overlap
-    /// any of the regions already stored in `config`.
-    ///
-    /// # Arguments
-    ///
-    /// `unallocated_memory_start`  : start of unallocated memory
-    /// `unallocated_memory_size`   : size of unallocated memory
-    /// `min_memory_size`           : minimum total memory to allocate for process
-    /// `initial_app_memory_size`   : initial size of app-owned memory
-    /// `initial_kernel_memory_size`: initial size of kernel-owned memory
-    /// `permissions`               : permissions for the MPU region
-    /// `config`                    : MPU region configuration
-    ///
-    /// # Return Value
-    ///
-    /// This function returns the start address and the size of the memory block
-    /// chosen for the process. If it is infeasible to find a memory block or
-    /// allocate the MPU region, or if the function has already been called, returns
-    /// None.
-    #[allow(unused_variables)]
-    fn allocate_app_memory_region(
-        &self,
-        unallocated_memory_start: *const u8,
-        unallocated_memory_size: usize,
-        min_memory_size: usize,
-        initial_app_memory_size: usize,
-        initial_kernel_memory_size: usize,
-        permissions: Permissions,
-        config: &mut Self::MpuConfig,
-    ) -> Option<(*const u8, usize)> {
-        let memory_size = {
-            if min_memory_size < initial_app_memory_size + initial_kernel_memory_size {
-                initial_app_memory_size + initial_kernel_memory_size
-            } else {
-                min_memory_size
-            }
-        };
-        if memory_size > unallocated_memory_size {
-            None
-        } else {
-            Some((unallocated_memory_start, memory_size))
-        }
-    }
-
-    /// Updates the MPU region for app-owned memory.
-    ///
-    /// An implementation must reallocate the MPU region for app-owned memory stored in
-    /// `config` to maintain the 3 conditions described in `allocate_app_memory_region`.
-    ///
-    /// # Arguments
-    ///
-    /// `app_memory_break`      : new address for the end of app-owned memory
-    /// `kernel_memory_break`   : new address for the start of kernel-owned memory
-    /// `permissions`           : permissions for the MPU region
-    /// `config`                : MPU region configuration
-    ///
-    /// # Return Value
-    ///
-    /// Returns an error if it is infeasible to update the MPU region, or if it was
-    /// never created.
-    #[allow(unused_variables)]
-    fn update_app_memory_region(
-        &self,
-        app_memory_break: *const u8,
-        kernel_memory_break: *const u8,
-        permissions: Permissions,
-        config: &mut Self::MpuConfig,
-    ) -> Result<(), ()> {
-        if (app_memory_break as usize) > (kernel_memory_break as usize) {
-            Err(())
-        } else {
-            Ok(())
-        }
-    }
+    /// Returns MPU configuration data implementing the requested regions.
+    /// If it is infeasible to allocate a memory region, returns its index.
+    fn allocate_regions(regions: &mut [Region]) -> Result<Self::MpuConfig, usize> {}
 
     /// Configures the MPU with the provided region configuration.
     ///

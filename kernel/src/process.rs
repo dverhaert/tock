@@ -8,6 +8,7 @@ use core::{mem, ptr, slice, str};
 use callback::AppId;
 use capabilities::ProcessManagementCapability;
 use common::cells::MapCell;
+use common::math;
 use common::{Queue, RingBuffer};
 use platform::mpu::{self, MPU};
 use returncode::ReturnCode;
@@ -598,13 +599,8 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
                 Err(Error::AddressOutOfBounds)
             } else if new_break > self.kernel_memory_break.get() {
                 Err(Error::OutOfMemory)
-            } else if let Err(_) = self.mpu.update_app_memory_region(
-                new_break,
-                self.kernel_memory_break.get(),
-                mpu::Permissions::ReadWriteExecute,
-                &mut config,
-            ) {
-                Err(Error::OutOfMemory)
+            } else if let Err(_) = allocate_regions(&mut regions[..num_regions]) {
+                Err(Error::OutOfMemory);
             } else {
                 let old_break = self.app_break.get();
                 self.app_break.set(new_break);
@@ -635,12 +631,7 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
             let new_break = self.kernel_memory_break.get().offset(-(size as isize));
             if new_break < self.app_break.get() {
                 None
-            } else if let Err(_) = self.mpu.update_app_memory_region(
-                self.app_break.get(),
-                new_break,
-                mpu::Permissions::ReadWriteExecute,
-                &mut config,
-            ) {
+            } else if let Err(_) = allocate_regions(&mut regions[..num_regions]) {
                 None
             } else {
                 self.kernel_memory_break.set(new_break);
@@ -956,31 +947,116 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
             // Minimum memory size for the process.
             let min_total_memory_size = min_app_ram_size + initial_kernel_memory_size;
 
-            // Determine where process memory will go and allocate MPU region for app-owned memory.
-            let (memory_start, memory_size) = match mpu.allocate_app_memory_region(
-                remaining_app_memory as *const u8,
-                remaining_app_memory_size,
-                min_total_memory_size,
-                initial_app_memory_size,
-                initial_kernel_memory_size,
-                mpu::Permissions::ReadWriteExecute,
-                &mut mpu_config,
-            ) {
-                Some((memory_start, memory_size)) => (memory_start, memory_size),
-                None => {
-                    debug!(
-                        "{:?} failed to load. Insufficient memory. Requested {} have {}",
-                        process_name, min_total_memory_size, remaining_app_memory_size
-                    );
-                    return (None, app_flash_size, 0);
-                }
+            // Allocate the memory for the flash, grant and PAM
+
+            let mut regions: [mpu::Region; 8] = [Default::default(); 8];
+
+            let flash_start = self.flash.as_ptr() as usize;
+            let flash_len = self.flash.len();
+            let flash_end = flash_start + flash_len;
+
+            // Flash region
+            let flash_region = mpu::Region::new(
+                mpu::RegionType::Relative {
+                    lower_bound: flash_start,
+                    upper_bound: flash_end,
+                    min_offset: 0,
+                    min_region_size: flash_len,
+                },
+                // These are ordered in read, write and execute.
+                // Both user and supervisor have R-X permissions to flash.
+                mpu::Permission::Full,
+                mpu::Permission::NoAccess,
+                mpu::Permission::Full,
+            );
+
+            regions[0] = flash_region;
+
+            let memory_start = self.memory.as_ptr() as usize;
+            let memory_len = self.memory.len();
+            let memory_end = memory_start + memory_len;
+
+            // PAM/Memory region
+            let memory_region = mpu::Region::new(
+                mpu::RegionType::Relative {
+                    lower_bound: memory_start,
+                    upper_bound: memory_end,
+                    min_offset: 0,
+                    min_region_size: memory_len,
+                },
+                // Both user and supervisor have RWX permissions to the PAM.
+                mpu::Permission::Full,
+                mpu::Permission::Full,
+                mpu::Permission::Full,
+            );
+
+            regions[1] = memory_region;
+
+            let grant_len = unsafe {
+                math::PowerOfTwo::ceiling(
+                    self.memory.as_ptr().offset(self.memory.len() as isize) as u32
+                        - (self.kernel_memory_break.get() as u32),
+                ).as_num::<u32>() as usize
             };
 
-            // Compute how much padding before start of process memory.
-            let memory_padding_size = (memory_start as usize) - (remaining_app_memory as usize);
+            let grant_start = unsafe {
+                self.memory
+                    .as_ptr()
+                    .offset(self.memory.len() as isize)
+                    .offset(-(grant_len as isize)) as usize
+            };
+
+            let grant_end = grant_start + grant_len;
+
+            // Grant region
+            let grant_region = mpu::Region::new(
+                mpu::RegionType::Relative {
+                    lower_bound: grant_start,
+                    upper_bound: grant_end,
+                    min_offset: 0,
+                    min_region_size: grant_len,
+                },
+                // Both user and supervisor have RWX permissions to the PAM.
+                mpu::Permission::SupervisorOnly,
+                mpu::Permission::SupervisorOnly,
+                mpu::Permission::NoAccess,
+            );
+
+            regions[2] = grant_region;
+
+            let mut num_regions = 3;
+
+            // IPC regions
+            for region in self.mpu_regions.iter() {
+                if !region.get().0.is_null() {
+                    let ipc_start = region.get().0 as usize;
+                    let ipc_end = ipc_start + region.get().1.as_num::<u32>() as usize;
+
+                    let ipc_region = mpu::Region::new(
+                        mpu::RegionType::Relative {
+                            start_address: ipc_start,
+                            end_address: ipc_end,
+                        },
+                        mpu::Permission::Full,
+                        mpu::Permission::Full,
+                        mpu::Permission::Full,
+                    );
+
+                    regions[num_regions] = ipc_region;
+                    num_regions += 1;
+                }
+            }
+
+            let config = match MPU::allocate_regions(&mut regions[..num_regions]) {
+                Ok(config) => config,
+                Err(index) => panic!("Unable to allocate MPU region at index {}.", index),
+            };
+
+            // Set MPU regions
+            mpu.configure_mpu(&config);
 
             // Set up process memory.
-            let app_memory = slice::from_raw_parts_mut(memory_start as *mut u8, memory_size);
+            let app_memory = slice::from_raw_parts_mut(remaining_app_memory, app_ram_size);
 
             // Set the initial process stack and memory to 128 bytes.
             let initial_stack_pointer = memory_start.offset(initial_app_memory_size as isize);
@@ -1086,11 +1162,7 @@ impl<S: 'static + UserspaceKernelBoundary, M: 'static + MPU> Process<'a, S, M> {
 
             kernel.increment_work();
 
-            return (
-                Some(process),
-                app_flash_size,
-                memory_padding_size + memory_size,
-            );
+            return (Some(process), app_flash_size, app_ram_size);
         }
         (None, 0, 0)
     }

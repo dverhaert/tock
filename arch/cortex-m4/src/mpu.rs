@@ -152,20 +152,6 @@ impl Default for CortexMConfig {
     }
 }
 
-impl CortexMConfig {
-    fn unused_region_number(&self) -> Option<usize> {
-        for (number, region) in self.regions.iter().enumerate() {
-            if number == APP_MEMORY_REGION_NUM {
-                continue;
-            }
-            if let None = region.location() {
-                return Some(number);
-            }
-        }
-        None
-    }
-}
-
 /// Struct storing configuration for a Cortex-M MPU region.
 #[derive(Copy, Clone)]
 pub struct CortexMRegion {
@@ -182,28 +168,38 @@ impl CortexMRegion {
         region_size: usize,
         region_num: usize,
         subregion_mask: Option<u32>,
-        permissions: mpu::Permissions,
     ) -> CortexMRegion {
-        // Determine access and execute permissions
-        let (access, execute) = match permissions {
-            mpu::Permissions::ReadWriteExecute => (
-                RegionAttributes::AP::ReadWrite,
-                RegionAttributes::XN::Enable,
-            ),
-            mpu::Permissions::ReadWriteOnly => (
-                RegionAttributes::AP::ReadWrite,
-                RegionAttributes::XN::Disable,
-            ),
-            mpu::Permissions::ReadExecuteOnly => {
-                (RegionAttributes::AP::ReadOnly, RegionAttributes::XN::Enable)
+        // Determine permissions
+        let read = region.get_read_permission();
+        let write = region.get_write_permission();
+        let execute = region.get_execute_permission();
+
+        // Convert execute permission to a bitfield
+        let execute_value = match execute {
+            Permission::NoAccess => RegionAttributes::XN::Disable,
+            Permission::Full => RegionAttributes::XN::Enable,
+            _ => {
+                return Err(i);
+            } // Not supported
+        };
+
+        // Convert read & write permissions to bitfields
+        let access_value = match read {
+            Permission::NoAccess => RegionAttributes::AP::NoAccess,
+            Permission::PrivilegedOnly => {
+                match write {
+                    Permission::NoAccess => RegionAttributes::AP::PrivilegedOnlyReadOnly,
+                    Permission::PrivilegedOnly => RegionAttributes::AP::PrivilegedOnly,
+                    _ => {
+                        return Err(i);
+                    } // Not supported
+                }
             }
-            mpu::Permissions::ReadOnly => (
-                RegionAttributes::AP::ReadOnly,
-                RegionAttributes::XN::Disable,
-            ),
-            mpu::Permissions::ExecuteOnly => {
-                (RegionAttributes::AP::NoAccess, RegionAttributes::XN::Enable)
-            }
+            Permission::Full => match write {
+                Permission::NoAccess => RegionAttributes::AP::ReadOnly,
+                Permission::PrivilegedOnly => RegionAttributes::AP::UnprivilegedReadOnly,
+                Permission::Full => RegionAttributes::AP::ReadWrite,
+            },
         };
 
         // Base address register
@@ -251,26 +247,6 @@ impl CortexMRegion {
     fn attributes(&self) -> FieldValue<u32, RegionAttributes::Register> {
         self.attributes
     }
-
-    fn overlaps(&self, other_start: *const u8, other_size: usize) -> bool {
-        let other_start = other_start as usize;
-        let other_end = other_start + other_size;
-
-        let (region_start, region_end) = match self.location {
-            Some((region_start, region_size)) => {
-                let region_start = region_start as usize;
-                let region_end = region_start + region_size;
-                (region_start, region_end)
-            }
-            None => return false,
-        };
-
-        if region_start < other_end && other_start < region_end {
-            true
-        } else {
-            false
-        }
-    }
 }
 
 fn round_up_to_nearest_multiple(x: usize, y: usize) -> usize {
@@ -303,283 +279,163 @@ impl kernel::mpu::MPU for MPU {
         regs.mpu_type.read(Type::DREGION) as usize
     }
 
-    fn allocate_region(
-        &self,
-        unallocated_memory_start: *const u8,
-        unallocated_memory_size: usize,
-        min_region_size: usize,
-        permissions: mpu::Permissions,
-        config: &mut Self::MpuConfig,
-    ) -> Option<mpu::Region> {
-        // Check that no previously allocated regions overlap the unallocated memory.
-        for region in config.regions.iter() {
-            if region.overlaps(unallocated_memory_start, unallocated_memory_size) {
-                return None;
-            }
-        }
+    fn allocate_regions(regions: &mut [Region]) -> Result<Self::MpuConfig, usize> {
+        let mut config = [
+            RegionConfig::empty(0),
+            RegionConfig::empty(1),
+            RegionConfig::empty(2),
+            RegionConfig::empty(3),
+            RegionConfig::empty(4),
+            RegionConfig::empty(5),
+            RegionConfig::empty(6),
+            RegionConfig::empty(7),
+        ];
 
-        let region_num = match config.unused_region_number() {
-            Some(number) => number,
-            None => return None,
-        };
-
-        // Logical region
-        let mut start = unallocated_memory_start as usize;
-        let mut size = min_region_size;
-
-        // Regions must be at least 32 bytes
-        if size < 32 {
-            size = 32;
-        }
-
-        // If we have to resort to using subregions, we calculate what our
-        // underlying region size and subregion size would look like.
-        let mut size_pow_two = math::closest_power_of_two(size as u32) as usize;
-        if size_pow_two < 256 {
-            size_pow_two = 256
-        }
-        let mut subregion_size = size_pow_two / 8;
-
-        // Rounds start up to subregion_size (which is always higher than 32).
-        start = round_up_to_nearest_multiple(start, subregion_size);
-
-        // These values form the physical MPU region: the values we write to
-        // the registers. The physical MPU region might be larger than
-        // the logical region if some subregions are disabled.
-        let mut region_start = start;
-        let mut region_size = size;
-        let mut subregion_mask = None;
-
-        // This loop checks if we can make subregions work for the subregion size
-        // being equal to size_pow_two/8, size_pow_two/4, size_pow_two/2 and
-        // finally size_pow_two.
-        // If none of these cases works, it is impossible to create a region,
-        // and we fail.
-        while subregion_size <= size_pow_two {
-            // If `size` doesn't align to the subregion size, extend it.
-            size = round_up_to_nearest_multiple(size, subregion_size);
-
-            // If the size is a power of two and start % size = 0, we have a valid
-            // region. If this is not the case, we try to cover the memory
-            // region by using a larger MPU region and expose certain subregions.
-            if size.count_ones() == 1 && start % size == 0 {
-                region_start = start;
-                region_size = size;
-                break;
+        for (i, region) in regions.iter().enumerate() {
+            // Only support 8 regions
+            if i >= 8 {
+                return Err(i);
             }
 
-            // If we increased our subregion size, we need to increase
-            // the underlying_region_size accordingly.
-            let underlying_region_size = subregion_size * 8;
+            let region_num = i as u32;
 
-            // We calculate the underlying_region_start by finding the nearest
-            // address below `start` that aligns with the region size.
-            let underlying_region_start = start - (start % underlying_region_size);
+            // Handle flexible start and end and relative locations
+            let (lower_bound, min_region_size, upper_bound) = match region.get_type() {
+                // TODO: Properly implement absolute
+                RegionType::Absolute {
+                    start_address,
+                    end_address,
+                    start_flexibility,
+                    end_flexibility,
+                } => (
+                    start_address - start_flexibility,
+                    end_address - start_address,
+                    end_address + end_flexibility,
+                ),
+                RegionType::Relative {
+                    lower_bound,
+                    upper_bound,
+                    min_offset,
+                    min_region_size,
+                } => (lower_bound + min_offset, min_region_size, upper_bound),
+            };
 
-            let end = start + size;
-            let underlying_region_end = underlying_region_start + underlying_region_size;
+            // Logical region
+            let mut start = lower_bound as usize;
+            let mut size = min_region_size;
 
-            // We have found a suitable subregion setup if the end of the
-            // underlying region covers the end of our memory. If so, we set this up
-            // and break. Otherwise, we repeat this while loop.
-            if underlying_region_end >= end {
-                // The index of the first subregion to activate is the number of
-                // regions between `region_start` (MPU) and `start` (memory).
-                let min_subregion = (start - underlying_region_start) / subregion_size;
-
-                // The index of the last subregion to activate is the number of
-                // regions that fit in `size`, plus the `min_subregion`, minus one
-                // (because subregions are zero-indexed).
-                let max_subregion = min_subregion + size / subregion_size - 1;
-
-                // Turn the min/max subregion into a bitfield where all bits are `1`
-                // except for the bits whose index lie within
-                // [min_subregion, max_subregion]
-                //
-                // Note: Rust ranges are minimum inclusive, maximum exclusive, hence
-                // max_subregion + 1.
-                let mask =
-                    (min_subregion..(max_subregion + 1)).fold(!0, |res, i| res & !(1 << i)) & 0xff;
-
-                region_start = underlying_region_start;
-                region_size = underlying_region_size;
-                subregion_mask = Some(mask);
-
-                break;
+            // Regions must be at least 32 bytes
+            if size < 32 {
+                size = 32;
             }
-            // We just tried aligning a certain start and size. Apparently, it
-            // didn't work out, so we try aligning for a bigger region instead.
-            subregion_size *= 2;
+
+            // If we have to resort to using subregions, we calculate what our
+            // underlying region size and subregion size would look like.
+            let mut size_pow_two = math::closest_power_of_two(size as u32) as usize;
+            if size_pow_two < 256 {
+                size_pow_two = 256
+            }
+            let mut subregion_size = size_pow_two / 8;
+
+            // Rounds start up to subregion_size (which is always higher than 32).
             start = round_up_to_nearest_multiple(start, subregion_size);
-        }
 
-        // Check if we found a suitable region
-        if subregion_size > size_pow_two {
-            return None;
-        }
+            // These values form the physical MPU region: the values we write to
+            // the registers. The physical MPU region might be larger than
+            // the logical region if some subregions are disabled.
+            let mut region_start = start;
+            let mut region_size = size;
+            let mut subregion_mask = None;
 
-        // Cortex-M regions can't be greater than 4 GB.
-        if math::log_base_two(region_size as u32) >= 32 {
-            return None;
-        }
+            // This loop checks if we can make subregions work for the subregion size
+            // being equal to size_pow_two/8, size_pow_two/4, size_pow_two/2 and
+            // finally size_pow_two.
+            // If none of these cases works, it is impossible to create a region,
+            // and we fail.
+            while subregion_size <= size_pow_two {
+                // If `size` doesn't align to the subregion size, extend it.
+                size = round_up_to_nearest_multiple(size, subregion_size);
 
-        // Check that our logical region fits in memory.
-        if start + size > (unallocated_memory_start as usize) + unallocated_memory_size {
-            return None;
-        }
+                // If the size is a power of two and start % size = 0, we have a valid
+                // region. If this is not the case, we try to cover the memory
+                // region by using a larger MPU region and expose certain subregions.
+                if size.count_ones() == 1 && start % size == 0 {
+                    region_start = start;
+                    region_size = size;
+                    break;
+                }
 
-        let region = CortexMRegion::new(
-            start as *const u8,
-            size,
-            region_start as *const u8,
-            region_size,
-            region_num,
-            subregion_mask,
-            permissions,
-        );
+                // If we increased our subregion size, we need to increase
+                // the underlying_region_size accordingly.
+                let underlying_region_size = subregion_size * 8;
 
-        config.regions[region_num] = region;
+                // We calculate the underlying_region_start by finding the nearest
+                // address below `start` that aligns with the region size.
+                let underlying_region_start = start - (start % underlying_region_size);
 
-        Some(mpu::Region::new(start as *const u8, size))
-    }
+                let end = start + size;
+                let underlying_region_end = underlying_region_start + underlying_region_size;
 
-    fn allocate_app_memory_region(
-        &self,
-        unallocated_memory_start: *const u8,
-        unallocated_memory_size: usize,
-        min_memory_size: usize,
-        initial_app_memory_size: usize,
-        initial_kernel_memory_size: usize,
-        permissions: mpu::Permissions,
-        config: &mut Self::MpuConfig,
-    ) -> Option<(*const u8, usize)> {
-        // Check that no previously allocated regions overlap the unallocated memory.
-        for region in config.regions.iter() {
-            if region.overlaps(unallocated_memory_start, unallocated_memory_size) {
+                // We have found a suitable subregion setup if the end of the
+                // underlying region covers the end of our memory. If so, we set this up
+                // and break. Otherwise, we repeat this while loop.
+                if underlying_region_end >= end {
+                    // The index of the first subregion to activate is the number of
+                    // regions between `region_start` (MPU) and `start` (memory).
+                    let min_subregion = (start - underlying_region_start) / subregion_size;
+
+                    // The index of the last subregion to activate is the number of
+                    // regions that fit in `size`, plus the `min_subregion`, minus one
+                    // (because subregions are zero-indexed).
+                    let max_subregion = min_subregion + size / subregion_size - 1;
+
+                    // Turn the min/max subregion into a bitfield where all bits are `1`
+                    // except for the bits whose index lie within
+                    // [min_subregion, max_subregion]
+                    //
+                    // Note: Rust ranges are minimum inclusive, maximum exclusive, hence
+                    // max_subregion + 1.
+                    let mask = (min_subregion..(max_subregion + 1))
+                        .fold(!0, |res, i| res & !(1 << i))
+                        & 0xff;
+
+                    region_start = underlying_region_start;
+                    region_size = underlying_region_size;
+                    subregion_mask = Some(mask);
+
+                    break;
+                }
+                // We just tried aligning a certain start and size. Apparently, it
+                // didn't work out, so we try aligning for a bigger region instead.
+                subregion_size *= 2;
+                start = round_up_to_nearest_multiple(start, subregion_size);
+            }
+
+            // Check if we found a suitable region
+            if subregion_size > size_pow_two {
                 return None;
             }
-        }
 
-        // Make sure there is enough memory for app memory and kernel memory.
-        let memory_size = {
-            if min_memory_size < initial_app_memory_size + initial_kernel_memory_size {
-                initial_app_memory_size + initial_kernel_memory_size
-            } else {
-                min_memory_size
+            // Cortex-M regions can't be greater than 4 GB.
+            if math::log_base_two(region_size as u32) >= 32 {
+                return None;
             }
-        };
 
-        // Size must be a power of two, so: https://www.youtube.com/watch?v=ovo6zwv6DX4
-        let mut region_size = math::closest_power_of_two(memory_size as u32) as usize;
-        let exponent = math::log_base_two(region_size as u32);
+            // Check that our logical region fits in memory.
+            if start + size > upper_bound {
+                return None;
+            }
 
-        if exponent < 8 {
-            // Region sizes must be 256 Bytes or larger in order to support subregions
-            region_size = 256;
-        } else if exponent > 32 {
-            // Region sizes must be 4GB or smaller
-            return None;
+            config[i] = CortexMRegion::new(
+                start as *const u8,
+                size,
+                region_start as *const u8,
+                region_size,
+                region_num,
+                subregion_mask,
+            );
         }
-
-        // Ideally, the region will start at the start of the unallocated memory.
-        let mut region_start = unallocated_memory_start as usize;
-
-        // If the start and length don't align, move region up until it does
-        region_start = round_up_to_nearest_multiple(region_start, region_size);
-
-        // The memory initially allocated for app memory will be aligned to an eigth of the total region length.
-        // This allows Cortex-M subregions to cover incrementally growing app memory in linear way.
-        // The Cortex-M has a total of 8 subregions per region, which is why we can have precision in
-        // eights of total region lengths.
-        //
-        // For example: subregions_used = (3500 * 8)/8192 + 1 = 4;
-        let mut subregions_used = (initial_app_memory_size * 8) / region_size + 1;
-
-        let kernel_memory_break = region_start + region_size - initial_kernel_memory_size;
-        let subregion_size = region_size / 8;
-        let subregions_end = region_start + subregions_used * subregion_size;
-
-        // If the last subregion for app memory overlaps the start of kernel
-        // memory, we can fix this by doubling the region size.
-        if subregions_end > kernel_memory_break {
-            region_size *= 2;
-            region_start = round_up_to_nearest_multiple(region_start, region_size);
-            subregions_used = (initial_app_memory_size * 8) / region_size + 1;
-        }
-
-        // Make sure the region fits in the unallocated memory.
-        if region_start + region_size
-            > (unallocated_memory_start as usize) + unallocated_memory_size
-        {
-            return None;
-        }
-
-        // For example: 11111111 & 11111110 = 11111110 --> Use only the first subregion (0 = enable)
-        let subregion_mask = (0..subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
-
-        let region = CortexMRegion::new(
-            region_start as *const u8,
-            region_size,
-            region_start as *const u8,
-            region_size,
-            APP_MEMORY_REGION_NUM,
-            Some(subregion_mask),
-            permissions,
-        );
-
-        config.regions[APP_MEMORY_REGION_NUM] = region;
-
-        Some((region_start as *const u8, region_size))
-    }
-
-    fn update_app_memory_region(
-        &self,
-        app_memory_break: *const u8,
-        kernel_memory_break: *const u8,
-        permissions: mpu::Permissions,
-        config: &mut Self::MpuConfig,
-    ) -> Result<(), ()> {
-        let (region_start, region_size) = match config.regions[APP_MEMORY_REGION_NUM].location() {
-            Some((start, size)) => (start as usize, size),
-            None => panic!(
-                "Error: Process tried to update app memory MPU region before it was created."
-            ),
-        };
-
-        let app_memory_break = app_memory_break as usize;
-        let kernel_memory_break = kernel_memory_break as usize;
-
-        // Out of memory
-        if app_memory_break > kernel_memory_break {
-            return Err(());
-        }
-
-        let app_memory_size = app_memory_break - region_start;
-
-        let num_subregions_used = (app_memory_size * 8) / region_size + 1;
-
-        // We can no longer cover app memory with an MPU region without overlapping kernel memory
-        let subregion_size = region_size / 8;
-        let subregions_end = region_start + subregion_size * num_subregions_used;
-        if subregions_end > kernel_memory_break {
-            return Err(());
-        }
-
-        let subregion_mask = (0..num_subregions_used).fold(!0, |res, i| res & !(1 << i)) & 0xff;
-
-        let region = CortexMRegion::new(
-            region_start as *const u8,
-            region_size,
-            region_start as *const u8,
-            region_size,
-            APP_MEMORY_REGION_NUM,
-            Some(subregion_mask),
-            permissions,
-        );
-
-        config.regions[APP_MEMORY_REGION_NUM] = region;
-
-        Ok(())
+        Some(mpu::Region::new(start as *const u8, size))
     }
 
     fn configure_mpu(&self, config: &Self::MpuConfig) {
