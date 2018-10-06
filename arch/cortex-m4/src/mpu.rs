@@ -332,20 +332,21 @@ impl kernel::mpu::MPU for MPU {
             size = 32;
         }
 
-        // The minimum possible subregion size given a certain min_region_size
-        // is closest_power_of_two(min_region_size)/8.
+        // If we have to resort to using subregions, we calculate what our
+        // underlying region size and subregion size would look like.
         let mut size_pow_two = math::closest_power_of_two(size as u32) as usize;
         if size_pow_two < 256 {
             size_pow_two = 256
         }
         let mut subregion_size = size_pow_two / 8;
 
-        // Rounds start up to subregion_size, which is always higher than 32.
+        // Rounds start up to subregion_size (which is always higher than 32).
         start = round_up_to_nearest_multiple(start, subregion_size);
 
-        // We would normally start from checking size_pow_two/8. However, if the
-        // start divides a higher power of two, we can skip some iterations by
-        // using this number as the subregion size instead.
+        // We would normally start from checking if we can make subregions
+        // work for the minimum possible subregion size.
+        // However, if the start divides a higher power of two, we can skip
+        // some iterations by using this number as the subregion size instead.
         if start != 0 {
             // Which (power-of-two) subregion size would align with the base
             // address? We find this by taking smallest binary substring of the base
@@ -354,13 +355,16 @@ impl kernel::mpu::MPU for MPU {
             subregion_size = (1 as usize) << start.trailing_zeros();
         }
 
-        // Physical MPU region (might be larger than logical region if some subregions are disabled)
+        // These values form the physical MPU region: the values we write to
+        // the registers. The physical MPU region might be larger than
+        // the logical region if some subregions are disabled.
         let mut region_start = start;
         let mut region_size = size;
         let mut subregion_mask = None;
 
-        // Rounds start up to region_size/8, region_size/4, region_size/2 and
-        // region_size, thereby checking all possibilities for subregions.
+        // This loop checks if we can make subregions work for the subregion size
+        // being equal to underlying_region_size/8, underlying_region_size/4,
+        // underlying_region_size/2 and finally underlying_region_size.
         // If none of these cases works, it is impossible to create a region,
         // and we fail.
         while subregion_size <= size_pow_two {
@@ -371,14 +375,16 @@ impl kernel::mpu::MPU for MPU {
             // region. If this is not the case, we try to cover the memory
             // region by using a larger MPU region and expose certain subregions.
             if size.count_ones() == 1 && start % size == 0 {
+                region_start = start;
+                region_size = size;
                 break;
             }
 
-            // Once we have a subregion size, we get a region size by
-            // multiplying it by the number of subregions per region.
+            // If we increased our subregion size, we need to increase
+            // the underlying_region_size accordingly.
             let underlying_region_size = subregion_size * 8;
 
-            // Finally, we calculate the region base by finding the nearest
+            // We calculate the underlying_region_start by finding the nearest
             // address below `start` that aligns with the region size.
             let underlying_region_start = start - (start % underlying_region_size);
 
@@ -418,6 +424,7 @@ impl kernel::mpu::MPU for MPU {
             subregion_size *= 2;
             start = round_up_to_nearest_multiple(start, subregion_size);
         }
+
 
         // Cortex-M regions can't be greater than 4 GB.
         if math::log_base_two(region_size as u32) >= 32 {
